@@ -213,6 +213,13 @@ function main() {
     local CHART_ASSIGNMENT_CONTROLLER_VERSION="0.1.0-cf378be"
     local PROMETHEUS_OPERATOR_CRDS_VERSION="30.0.1"
 
+    local ARCH
+    case "$(uname -m)" in
+        x86_64) ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+        *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+    esac
+
     WORK_DIR=$(mktemp -d)
     trap 'rm -rf "${WORK_DIR}"' EXIT
 
@@ -235,10 +242,10 @@ function main() {
     run_silent sh -c "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 | bash -s -- -v '${HELM_VERSION}'"
 
     echo "Installing k9s version ${K9S_VERSION}..."
-    run_silent sh -c "curl -fsSL 'https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_amd64.tar.gz' | sudo tar -C /usr/local/bin -zx k9s"
+    run_silent sh -c "curl -fsSL 'https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_${ARCH}.tar.gz' | sudo tar -C /usr/local/bin -zx k9s"
 
     echo "Installing Istio CLI version ${ISTIO_VERSION}..."
-    run_silent sh -c "curl -fsL 'https://storage.googleapis.com/istio-release/releases/${ISTIO_VERSION}/istioctl-${ISTIO_VERSION}-linux-amd64.tar.gz' | sudo tar -C /usr/local/bin -zx istioctl"
+    run_silent sh -c "curl -fsL 'https://storage.googleapis.com/istio-release/releases/${ISTIO_VERSION}/istioctl-${ISTIO_VERSION}-linux-${ARCH}.tar.gz' | sudo tar -C /usr/local/bin -zx istioctl"
 
     write_istio_config "${ISTIO_CONFIG_FILE}"
     run_silent /usr/local/bin/istioctl install -f "${ISTIO_CONFIG_FILE}" --skip-confirmation
