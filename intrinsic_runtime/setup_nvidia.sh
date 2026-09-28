@@ -108,7 +108,10 @@ function check_gpu() {
     fi
 
     if [[ "${gpu_found}" -eq 0 ]]; then
-        echo "WARNING: No NVIDIA GPU detected on PCI bus." >&2
+        echo "Error: No NVIDIA GPU detected on PCI bus. Aborting before changing" >&2
+        echo "       the system, as K3s would otherwise default to a runtime that" >&2
+        echo "       cannot start containers." >&2
+        exit 1
     fi
 }
 
