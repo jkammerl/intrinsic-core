@@ -677,7 +677,10 @@ oci.pull(
     name = "python3",
     digest = "sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/library/python",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
     tag = "3-slim",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
@@ -698,21 +701,30 @@ oci.pull(
     name = "terraform_base",
     digest = "sha256:985cdc6c1d9b0a65b83377f666efd2f740b47f02ac55be1ced3d18f7d3b0e829",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/hashicorp/terraform",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64",
+    ],
     tag = "1.16",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
     name = "nginx_base",
     digest = "sha256:908dc23e643a1447dbfb2e189ed268bfde6a51a5bf9a34d3dd3440a24f58ccf7",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/library/nginx",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
     tag = "1.31.6",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
     name = "distroless_static",
     digest = "sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0",
     image = "gcr.io/distroless/static",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
     tag = "latest",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
@@ -784,7 +796,10 @@ oci.pull(
     name = "distroless_base",
     digest = "sha256:0ebad3510af52aefe45045cc01b07564570be4feecf8d9f93d3a05d1b5f2f93b",
     image = "gcr.io/distroless/base",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
 )
 
 # Version pinned due to b/478927987.
@@ -792,20 +807,29 @@ oci.pull(
     name = "distroless_base_bookworm",
     digest = "sha256:9e9b50d2048db3741f86a48d939b4e4cc775f5889b3496439343301ff54cdba8",
     image = "gcr.io/distroless/base",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
     tag = "bookworm",
 )
 oci.pull(
     name = "distroless_cc",
     digest = "sha256:4594d59540d1948417f6ca2829ddd9294493a7c68b7528f4dd459de7f203a750",
     image = "gcr.io/distroless/cc",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
 )
 oci.pull(
     name = "distroless_python3",
     digest = "sha256:e866e2f9fbaa19f63e579cf2f61b7f76cd8a74c43a62a0af95d48678d9878436",
     image = "gcr.io/distroless/python3",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
 )
 oci.pull(
     name = "zenohd",
@@ -823,17 +847,24 @@ use_repo(
     "distroless_base",
     "distroless_base_bookworm",
     "distroless_base_bookworm_linux_amd64",
+    "distroless_base_bookworm_linux_arm64_v8",
     "distroless_base_linux_amd64",
+    "distroless_base_linux_arm64_v8",
     "distroless_cc",
     "distroless_cc_linux_amd64",
+    "distroless_cc_linux_arm64_v8",
     "distroless_python3",
     "distroless_python3_linux_amd64",
+    "distroless_python3_linux_arm64_v8",
     "distroless_static",  
     "distroless_static_linux_amd64",  
+    "distroless_static_linux_arm64_v8",  
     "nginx_base",  
     "nginx_base_linux_amd64",  
+    "nginx_base_linux_arm64_v8",  
     "python3",  
     "python3_linux_amd64",  
+    "python3_linux_arm64_v8",  
     "ssh_certificate_provider_base",  
     "ssh_certificate_provider_base_linux_amd64",  
     "tensorflow-gpu",  
@@ -842,6 +873,7 @@ use_repo(
     "tensorflow_serving_linux_amd64",  
     "terraform_base",  
     "terraform_base_linux_amd64",  
+    "terraform_base_linux_arm64",  
     "timescaledb",  
     "timescaledb_linux_amd64",  
     "torchserve-cpu",  
