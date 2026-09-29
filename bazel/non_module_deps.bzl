@@ -20,8 +20,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file"
 load("//bazel:debian_sysroot.bzl", "debian_sysroot")
 
 # Module extension function signatures include a ctx variable, which should not be removed.
-def _non_module_deps_impl(
-        ctx):  # @unused
+def _non_module_deps_impl(ctx):
     # To update this, see https://github.com/intrinsic-ai/intrinsic-core/blob/main/bazel/sysroot/README.md.  
     http_archive(
         name = "intrinsic_llvm_sysroot",
@@ -55,13 +54,21 @@ filegroup(
 
 
 
-    # Download and extract GLVND EGL/GL stubs from the sysroot.
-    # Needed for tests that require OpenGL/EGL
+    # Download and extract GLVND EGL/GL stubs from the sysroot for the host
+    # architecture. Needed for tests that require OpenGL/EGL
+    if ctx.os.arch in ("aarch64", "arm64"):
+        # Debian bullseye arm64 sysroot from Chromium's
+        # build/linux/sysroot_scripts/sysroots.json.
+        glvnd_stubs_url = "https://commondatastorage.googleapis.com/chrome-linux-sysroot/c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"
+        glvnd_stubs_sha256 = "c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"
+    else:
+        glvnd_stubs_url = "https://storage.googleapis.com/chrome-linux-sysroot/toolchain/4f611ec025be98214164d4bf9fbe8843f58533f7/debian_bullseye_amd64_sysroot.tar.xz"
+        glvnd_stubs_sha256 = "5df5be9357b425cdd70d92d4697d07e7d55d7a923f037c22dc80a78e85842d2c"
     http_archive(
         name = "sysroot_glvnd_stubs",
         build_file = Label("//intrinsic/production/external:sysroot_glvnd_stubs.BUILD.bazel"),
-        urls = ["https://storage.googleapis.com/chrome-linux-sysroot/toolchain/4f611ec025be98214164d4bf9fbe8843f58533f7/debian_bullseye_amd64_sysroot.tar.xz"],
-        sha256 = "5df5be9357b425cdd70d92d4697d07e7d55d7a923f037c22dc80a78e85842d2c",
+        urls = [glvnd_stubs_url],
+        sha256 = glvnd_stubs_sha256,
         type = "tar.xz",
     )
 
@@ -199,4 +206,8 @@ filegroup(
 
 
 
-non_module_deps_ext = module_extension(implementation = _non_module_deps_impl)
+non_module_deps_ext = module_extension(
+    implementation = _non_module_deps_impl,
+    # sysroot_glvnd_stubs depends on the host architecture.
+    arch_dependent = True,
+)

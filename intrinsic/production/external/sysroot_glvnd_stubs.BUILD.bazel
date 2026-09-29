@@ -27,22 +27,29 @@ package(
     ],
 )
 
+# The repository contains either the amd64 or the arm64 sysroot, depending on
+# the host architecture (see //bazel:non_module_deps.bzl).
+_TRIPLE = "aarch64-linux-gnu" if glob(
+    ["usr/lib/aarch64-linux-gnu/libGL.so"],
+    allow_empty = True,
+) else "x86_64-linux-gnu"
+
 filegroup(
     name = "files",
     srcs = glob([
         # OpenGL and EGL deps
-        "usr/lib/x86_64-linux-gnu/libGL.so*",
-        "usr/lib/x86_64-linux-gnu/libGLX.so*",
-        "usr/lib/x86_64-linux-gnu/libEGL.so*",
-        "usr/lib/x86_64-linux-gnu/libGLdispatch.so*",
-        "usr/lib/x86_64-linux-gnu/libOpenGL.so.*",
-        "usr/lib/x86_64-linux-gnu/libX11.so*",
-        "usr/lib/x86_64-linux-gnu/libxcb.so*",
-        "usr/lib/x86_64-linux-gnu/libXau.so*",
-        "usr/lib/x86_64-linux-gnu/libXdmcp.so*",
-        "usr/lib/x86_64-linux-gnu/libXext.so*",
-        "usr/lib/x86_64-linux-gnu/libbsd.so*",
-        "usr/lib/x86_64-linux-gnu/libmd.so*",
+        "usr/lib/" + _TRIPLE + "/libGL.so*",
+        "usr/lib/" + _TRIPLE + "/libGLX.so*",
+        "usr/lib/" + _TRIPLE + "/libEGL.so*",
+        "usr/lib/" + _TRIPLE + "/libGLdispatch.so*",
+        "usr/lib/" + _TRIPLE + "/libOpenGL.so.*",
+        "usr/lib/" + _TRIPLE + "/libX11.so*",
+        "usr/lib/" + _TRIPLE + "/libxcb.so*",
+        "usr/lib/" + _TRIPLE + "/libXau.so*",
+        "usr/lib/" + _TRIPLE + "/libXdmcp.so*",
+        "usr/lib/" + _TRIPLE + "/libXext.so*",
+        "usr/lib/" + _TRIPLE + "/libbsd.so*",
+        "usr/lib/" + _TRIPLE + "/libmd.so*",
     ]),
 )
 
@@ -65,32 +72,32 @@ genrule(
 cc_library(
     name = "system_glib",
     srcs = glob([
-        "usr/lib/x86_64-linux-gnu/libglib-2.0.so*",
-        "lib/x86_64-linux-gnu/libpcre.so.3*",
+        "usr/lib/" + _TRIPLE + "/libglib-2.0.so*",
+        "lib/" + _TRIPLE + "/libpcre.so.3*",
     ]) + [":empty_cc"],
     hdrs = glob([
         "usr/include/glib-2.0/**/*.h",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include/**/*.h",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include/**/*.h",
     ]),
     includes = [
         "usr/include/glib-2.0",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include",
     ],
 )
 
 cc_library(
     name = "system_gobject",
     srcs = glob([
-        "usr/lib/x86_64-linux-gnu/libgobject-2.0.so*",
-        "usr/lib/x86_64-linux-gnu/libffi.so.7*",
+        "usr/lib/" + _TRIPLE + "/libgobject-2.0.so*",
+        "usr/lib/" + _TRIPLE + "/libffi.so.7*",
     ]) + [":empty_cc"],
     hdrs = glob([
         "usr/include/glib-2.0/**/*.h",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include/**/*.h",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include/**/*.h",
     ]),
     includes = [
         "usr/include/glib-2.0",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include",
     ],
     deps = [":system_glib"],
 )
@@ -98,20 +105,20 @@ cc_library(
 cc_library(
     name = "system_gio",
     srcs = glob([
-        "usr/lib/x86_64-linux-gnu/libgio-2.0.so*",
-        "usr/lib/x86_64-linux-gnu/libmount.so.1*",
-        "usr/lib/x86_64-linux-gnu/libblkid.so.1*",
-        "lib/x86_64-linux-gnu/libselinux.so.1*",
+        "usr/lib/" + _TRIPLE + "/libgio-2.0.so*",
+        "usr/lib/" + _TRIPLE + "/libmount.so.1*",
+        "usr/lib/" + _TRIPLE + "/libblkid.so.1*",
+        "lib/" + _TRIPLE + "/libselinux.so.1*",
     ]) + [":empty_cc"],
     hdrs = glob([
         "usr/include/glib-2.0/**/*.h",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include/**/*.h",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include/**/*.h",
         "usr/include/gio-unix-2.0/**/*.h",
     ]),
     includes = [
         "usr/include/gio-unix-2.0",
         "usr/include/glib-2.0",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include",
     ],
     deps = [
         ":system_glib",
@@ -121,14 +128,14 @@ cc_library(
 
 cc_library(
     name = "system_gmodule",
-    srcs = glob(["usr/lib/x86_64-linux-gnu/libgmodule-2.0.so*"]) + [":empty_cc"],
+    srcs = glob(["usr/lib/" + _TRIPLE + "/libgmodule-2.0.so*"]) + [":empty_cc"],
     hdrs = glob([
         "usr/include/glib-2.0/**/*.h",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include/**/*.h",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include/**/*.h",
     ]),
     includes = [
         "usr/include/glib-2.0",
-        "usr/lib/x86_64-linux-gnu/glib-2.0/include",
+        "usr/lib/" + _TRIPLE + "/glib-2.0/include",
     ],
     deps = [":system_glib"],
 )
