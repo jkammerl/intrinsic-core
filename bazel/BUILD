@@ -102,6 +102,19 @@ platform(
     parents = ["@platforms//host"],
 )
 
+# Host platform for native builds on arm64 hosts, selected by --config=arm64
+# (see .bazelrc and tools/bazel).
+platform(
+    name = "linux_aarch64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = DEFAULT,
+    parents = ["@platforms//host"],
+)
+
 go_proto_compiler(
     name = "go_gen_grpc_gateway",
     options = [

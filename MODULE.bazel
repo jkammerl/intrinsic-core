@@ -251,6 +251,7 @@ pip.parse(
     python_version = PYTHON_VERSION,
     requirements_lock = "//:requirements.txt",  
     target_platforms = [
+        "linux_aarch64",
         "linux_x86_64",
     ],
 )
@@ -270,19 +271,32 @@ llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm", 
 llvm.toolchain(
 
     fastbuild_compile_flags = {
+        "linux-aarch64": [
+            "-O1",
+        ],
         "linux-x86_64": [
             "-O1",
         ],
     },
 
+    extra_compile_flags = {
+        "linux-x86_64": [
+            "-mcrc32",
+        ],
+    },
     llvm_version = "21.1.0",
 )
 
-use_repo(non_module_deps, "intrinsic_llvm_sysroot")
+use_repo(non_module_deps, "intrinsic_llvm_sysroot", "intrinsic_llvm_sysroot_aarch64")
 
 llvm.sysroot(
     label = "@intrinsic_llvm_sysroot//:all_files",
     targets = ["linux-x86_64"],
+)
+
+llvm.sysroot(
+    label = "@intrinsic_llvm_sysroot_aarch64//:all_files",
+    targets = ["linux-aarch64"],
 )
 use_repo(
     llvm,
@@ -409,6 +423,11 @@ node.toolchain(
             "node-v24.20.0-linux-x64.tar.xz",
             "node-v24.20.0-linux-x64",
             "2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2",
+        ],
+        "24.20.0-linux_arm64": [
+            "node-v24.20.0-linux-arm64.tar.xz",
+            "node-v24.20.0-linux-arm64",
+            "5f4ddab610c1ab2016b3c227cebdbf6d9495161487e4739c7b90090595f465f7",
         ],
     },
     node_version_from_nvmrc = "//:.nvmrc",
