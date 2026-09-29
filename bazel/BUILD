@@ -46,7 +46,10 @@ bool_flag(
 # the default bash launcher's rlocation resolution.
 sh_binary(
     name = "zstd",
-    srcs = ["@zstd_linux_amd64//:zstd"],
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@zstd_linux_arm64//:zstd"],
+        "//conditions:default": ["@zstd_linux_amd64//:zstd"],
+    }),
     use_bash_launcher = False,
     visibility = ["//visibility:public"],
 )
@@ -119,6 +122,19 @@ platform(
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = DEFAULT,
+    parents = ["@platforms//host"],
+)
+
+# Host platform for native builds on arm64 hosts, selected by --config=arm64
+# (see .bazelrc and tools/bazel).
+platform(
+    name = "linux_aarch64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
         "@bazel_tools//tools/cpp:clang",
     ],
     exec_properties = DEFAULT,

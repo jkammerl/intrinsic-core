@@ -214,8 +214,15 @@ common:benchmark --features=-prefer_pic_for_opt_binaries
 
 # --config haswell for building for the Haswell architecture.
 common:haswell --cpu=haswell
-common:haswell --copt=-mcrc32
+# -mcrc32 is x86-only and therefore set per target in the LLVM toolchain
+# (extra_compile_flags in MODULE.bazel).
 common --config=haswell
+
+# --config arm64 for building on arm64 hosts. It overrides --cpu=haswell so that
+# dependencies selecting on --cpu (e.g. highwayhash) pick their arm64 code
+# paths. tools/bazel applies it automatically on arm64 hosts.
+common:arm64 --cpu=aarch64
+common:arm64 --host_platform=//bazel:linux_aarch64
 
 # Address sanitizer
 common:asan --strip=never

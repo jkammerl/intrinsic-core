@@ -250,6 +250,7 @@ pip.parse(
     python_version = PYTHON_VERSION,
     requirements_lock = "//:requirements.txt",  
     target_platforms = [
+        "linux_aarch64",
         "linux_x86_64",
     ],
 )
@@ -269,19 +270,32 @@ llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm", 
 llvm.toolchain(
 
     fastbuild_compile_flags = {
+        "linux-aarch64": [
+            "-O1",
+        ],
         "linux-x86_64": [
             "-O1",
         ],
     },
 
+    extra_compile_flags = {
+        "linux-x86_64": [
+            "-mcrc32",
+        ],
+    },
     llvm_version = "21.1.0",
 )
 
-use_repo(non_module_deps, "intrinsic_llvm_sysroot")
+use_repo(non_module_deps, "intrinsic_llvm_sysroot", "intrinsic_llvm_sysroot_aarch64")
 
 llvm.sysroot(
     label = "@intrinsic_llvm_sysroot//:all_files",
     targets = ["linux-x86_64"],
+)
+
+llvm.sysroot(
+    label = "@intrinsic_llvm_sysroot_aarch64//:all_files",
+    targets = ["linux-aarch64"],
 )
 use_repo(
     llvm,
@@ -408,6 +422,11 @@ node.toolchain(
             "node-v24.21.0-linux-x64.tar.xz",
             "node-v24.21.0-linux-x64",
             "fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6",
+        ],
+        "24.21.0-linux_arm64": [
+            "node-v24.21.0-linux-arm64.tar.xz",
+            "node-v24.21.0-linux-arm64",
+            "6ad1325edbdb5649c379b75a237147a666c95d4f9ae8d340fef2d1575d289ad2",
         ],
     },
     node_version_from_nvmrc = "//:.nvmrc",
@@ -636,7 +655,7 @@ bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_helm", version = "0.32.0")  
 
 aspect_toolchains = use_extension("@aspect_bazel_lib//lib:extensions.bzl", "toolchains")
-use_repo(aspect_toolchains, "zstd_linux_amd64")
+use_repo(aspect_toolchains, "zstd_linux_amd64", "zstd_linux_arm64")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 

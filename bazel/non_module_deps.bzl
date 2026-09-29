@@ -17,6 +17,7 @@ Module extension for non-module dependencies
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
+load("//bazel:debian_sysroot.bzl", "debian_sysroot")
 
 # Module extension function signatures include a ctx variable, which should not be removed.
 def _non_module_deps_impl(
@@ -32,6 +33,23 @@ filegroup(
     visibility = ["//visibility:public"]
 )""",
         urls = ["https://storage.googleapis.com/intrinsic-mirror/bazel/sysroot-2025-07-22-845e86b8.tar.zst"],
+    )
+
+    # Debian bullseye (glibc 2.31, same as the x86_64 sysroot above) sysroot
+    # for linux-aarch64 targets, so that arm64 binaries run in the distroless
+    # base images instead of requiring the build host's glibc. Uses the same
+    # snapshot as //bazel/debian_snapshot:bullseye_mesa.yaml.
+    debian_sysroot(
+        name = "intrinsic_llvm_sysroot_aarch64",
+        debs = {
+            "https://snapshot.debian.org/archive/debian/20260320T204549Z/pool/main/g/glibc/libc6_2.31-13+deb11u11_arm64.deb": "baaa9aa184e2f21738c5819055e6740cc5b22f198e3f416e33f82b40ff6933d8",
+            "https://snapshot.debian.org/archive/debian/20260320T204549Z/pool/main/g/glibc/libc6-dev_2.31-13+deb11u11_arm64.deb": "28d478134722dcd4b0bd2045a199301d18713bf95947b9fce66634e7aeacab2e",
+            "https://snapshot.debian.org/archive/debian/20260320T204549Z/pool/main/g/gcc-10/libgcc-10-dev_10.2.1-6_arm64.deb": "80fc73d339ada2e194175afe83cd89014565242153b6e3c2128849d8817da367",
+            "https://snapshot.debian.org/archive/debian/20260320T204549Z/pool/main/g/gcc-10/libgcc-s1_10.2.1-6_arm64.deb": "e2fcdb378d3c1ad1bcb64d4fb6b37aab44011152beca12a4944f435a2582df1f",
+            "https://snapshot.debian.org/archive/debian/20260320T204549Z/pool/main/l/linux/linux-libc-dev_5.10.223-1_arm64.deb": "8b6374a64412d33eac61d74f77b8f932da4b8a707ea8a614791e2a35b8917618",
+            "https://snapshot.debian.org/archive/debian/20260320T204549Z/pool/main/libx/libxcrypt/libcrypt-dev_4.4.18-4_arm64.deb": "5309fdf445acc72794b9d134e9625746ffad2b865c6432abcd08ef097587bde1",
+            "https://snapshot.debian.org/archive/debian/20260320T204549Z/pool/main/libx/libxcrypt/libcrypt1_4.4.18-4_arm64.deb": "22b586b29e840dabebf0bf227d233376628b87954915d064bc142ae85d1b7979",
+        },
     )
 
 
