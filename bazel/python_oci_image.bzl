@@ -106,8 +106,9 @@ def python_layers(name, binary, **kwargs):
     )
 
     # Version-agnostic pattern matching the bundled rules_python interpreter directory in runfiles
-    # (e.g., `rules_python++python+python_3_11_x86_64-unknown-linux-gnu/`).
-    PY_INTERPRETER_DIR_REGEX = "rules_python\\S*_x86_64-unknown-linux-gnu/"
+    # (e.g., `rules_python++python+python_3_11_x86_64-unknown-linux-gnu/` or
+    # `..._aarch64-unknown-linux-gnu/`).
+    PY_INTERPRETER_DIR_REGEX = "rules_python\\S*_\\(x86_64\\|aarch64\\)-unknown-linux-gnu/"
 
     # In rules_python 2.0+, `bootstrap_impl=system_python` creates a venv interpreter entry in runfiles:
     #   <runfiles_dir>/_main/<pkg>/_<bin>.venv/bin/python3 uid=0 ... type=file content=bazel-out/.../_<bin>.venv/bin/python3
