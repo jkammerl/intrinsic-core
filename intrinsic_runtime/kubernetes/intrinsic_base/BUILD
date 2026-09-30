@@ -68,6 +68,7 @@ helm_chart(
         "world": "//intrinsic/world/binary:world-image.tar",
         "world_updater": "//intrinsic/world/service/updater:world-updater-image.tar",
         "zenoh_introspection": "//intrinsic/platform/pubsub/introspection:zenoh-introspection-image.tar",
+        "zenohd": "//third_party/zenohd:zenohd-image.tar",
         # keep-sorted end
     } | {
         # keep-sorted start

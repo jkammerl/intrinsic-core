@@ -1,0 +1,17 @@
+{
+  mode: "router",
+  connect: { endpoints: [] },
+  listen: {
+    endpoints: [ "tcp/0.0.0.0:7447" ],
+  },
+  scouting: {
+    multicast: { enabled: false },
+    gossip: {
+      enabled: true,
+      multihop: false,
+      autoconnect: { peer: ["router"] },
+    },
+  },
+  plugins: {
+  }
+}
