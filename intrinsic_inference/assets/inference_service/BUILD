@@ -13,7 +13,6 @@
 # limitations under the License.
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
-load("//bazel:container.bzl", "container_image")
 load("//bazel:python_oci_image.bzl", "python_oci_image")
 load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
@@ -116,14 +115,4 @@ python_oci_image(
     name = "inference_service_image",
     base = "@distroless_python3",
     binary = "inference_service_main",
-)
-
-# Triton Inference Server, which the ONNX Runtime server replaced. It is x86_64
-# only and needs an NVIDIA GPU.
-container_image(
-    name = "triton_inference_server_image",
-    base = "@tritonserver-onprem",
-    env = {
-        "TRITON_TEMP_DIR": "/tmp",
-    },
 )
