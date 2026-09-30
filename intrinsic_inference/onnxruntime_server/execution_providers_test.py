@@ -92,6 +92,39 @@ class CreateSessionTest(absltest.TestCase):
           self.model_path, sess_options=None, providers=[CUDA, CPU]
       )
 
+  def test_auto_skips_cuda_without_driver(self):
+    with mock.patch.object(
+        ort, "get_available_providers", return_value=[CUDA, CPU]
+    ), mock.patch.object(
+        execution_providers, "cuda_driver_available", return_value=False
+    ), mock.patch.object(
+        execution_providers, "preload_cuda_libraries"
+    ) as preload, mock.patch.object(
+        ort, "InferenceSession", autospec=True
+    ) as session_cls:
+      session_cls.return_value.get_providers.return_value = [CPU]
+      execution_providers.create_session(self.model_path, Device.AUTO)
+      session_cls.assert_called_once_with(
+          self.model_path, sess_options=None, providers=[CPU]
+      )
+      preload.assert_not_called()
+
+  def test_gpu_tries_cuda_without_driver(self):
+    # Forcing the GPU still tries CUDA, so that its error is reported.
+    with mock.patch.object(
+        ort, "get_available_providers", return_value=[CUDA, CPU]
+    ), mock.patch.object(
+        execution_providers, "cuda_driver_available", return_value=False
+    ), mock.patch.object(
+        execution_providers, "preload_cuda_libraries"
+    ) as preload, mock.patch.object(
+        ort, "InferenceSession", autospec=True
+    ) as session_cls:
+      session_cls.return_value.get_providers.return_value = [CPU]
+      with self.assertRaisesRegex(RuntimeError, "could not initialize a GPU"):
+        execution_providers.create_session(self.model_path, Device.GPU)
+      preload.assert_called_once()
+
 
 class PreloadCudaLibrariesTest(absltest.TestCase):
 

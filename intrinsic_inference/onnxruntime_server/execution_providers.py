@@ -57,6 +57,16 @@ _CUDA_LIBRARIES = (
 
 
 @functools.cache
+def cuda_driver_available() -> bool:
+  """Returns whether the NVIDIA driver's CUDA library can be loaded."""
+  try:
+    ctypes.CDLL("libcuda.so.1")
+  except OSError:
+    return False
+  return True
+
+
+@functools.cache
 def preload_cuda_libraries() -> list[str]:
   """Loads the CUDA and cuDNN libraries of the installed nvidia-* wheels.
 
@@ -158,7 +168,12 @@ def create_session(
   """
   providers = select_providers(device)
   if "CUDAExecutionProvider" in providers:
-    preload_cuda_libraries()
+    if device == Device.AUTO and not cuda_driver_available():
+      # Without a driver the CUDA provider can't initialize. Skip it instead of
+      # loading CUDA and letting ONNX Runtime log an error and fall back.
+      providers.remove("CUDAExecutionProvider")
+    else:
+      preload_cuda_libraries()
   session = ort.InferenceSession(
       model, sess_options=session_options, providers=providers
   )

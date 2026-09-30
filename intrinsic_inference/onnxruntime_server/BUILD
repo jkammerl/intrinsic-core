@@ -100,10 +100,24 @@ py_binary(
     ],
 )
 
+# On hosts whose container runtime is NVIDIA's (see
+# intrinsic_runtime/setup_nvidia.sh), the environment exposes the GPUs to the
+# server without requesting them from Kubernetes, so the same deployment runs
+# on hosts without a GPU. The server then falls back to the CPU.
 python_oci_image(
     name = "onnxruntime_server_image",
     base = "@distroless_python3",
     binary = "server_main",
+    cmd = [],
+    # The launcher's shebang needs /usr/bin/env, which distroless lacks.
+    entrypoint = [
+        "python3",
+        "/intrinsic_inference/onnxruntime_server/server_main",
+    ],
+    env = {
+        "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+        "NVIDIA_VISIBLE_DEVICES": "all",
+    },
 )
 
 py_library(
