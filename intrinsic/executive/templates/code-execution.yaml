@@ -51,7 +51,9 @@ spec:
           # Runs a jupyter server on localhost:8888 as non-root user
           # Images from: ghcr.io/intrinsic-ai/code-execution-jupyter-server
           # Use executive/tools/release_code_execution_image.sh to update this.
-          image: ghcr.io/intrinsic-ai/code-execution-jupyter-server@sha256:e14b4e15b1b8341671c372eeadc328b25663c506827dc47e2e60e0f7b7ef1f2c
+          # The released image is amd64-only; code_execution_jupyter_image
+          # replaces it, e.g. with a native build on arm64 hosts.
+          image: {{ .Values.code_execution_jupyter_image | default "ghcr.io/intrinsic-ai/code-execution-jupyter-server@sha256:e14b4e15b1b8341671c372eeadc328b25663c506827dc47e2e60e0f7b7ef1f2c" | quote }}
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000

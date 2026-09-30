@@ -27,6 +27,10 @@ executive_expose_debug_service: false
 
 use_task_planner: false
 
+# Image of the code execution service's Jupyter server. Empty uses the released
+# image pinned in code-execution.yaml, which is amd64-only.
+code_execution_jupyter_image: ""
+
 executive_flags:
   # Normally, footprints are generated through skill projection and then checked
   # to detect conflicts between concurrent skills. When this flag is set to
