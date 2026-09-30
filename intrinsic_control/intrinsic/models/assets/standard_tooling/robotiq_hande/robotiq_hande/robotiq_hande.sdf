@@ -104,6 +104,7 @@ limitations under the License.
 
     <!-- Fingers and their prismatic joints -->
     <link name="gripper_finger1">
+      <pose>0.005 0 0 0 0 0</pose>
       <inertial>
         <mass>0.2</mass>
         <!-- Approximately set assuming a box of uniform density of size 0.015 0.04 0.07 -->
@@ -160,6 +161,7 @@ limitations under the License.
       </collision>
     </link>
     <link name="gripper_finger2">
+      <pose>-0.005 0 0 0 0 0</pose>
       <inertial>
         <mass>0.2</mass>
         <!-- Approximately set assuming a box of uniform density of size 0.015 0.04 0.07 -->
