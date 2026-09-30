@@ -14,8 +14,11 @@
 
 #include "intrinsic/perception/core/compute_normals_least_sqr.h"
 
+#if defined(__AVX__)
 #include <immintrin.h>
+#endif
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 
@@ -27,6 +30,8 @@
 namespace intrinsic::perception {
 
 namespace {
+
+#if defined(__AVX__)
 
 // Store normal values from SIMD registers to 8 consecutive pixels in dst.
 void StoreNormals(const __m256& avx_nx, const __m256& avx_ny,
@@ -66,6 +71,8 @@ void Accum(const __m256& avx_i, const __m256& avx_j, const __m256& avx_thres,
   avx_b1 += avx_fj * avx_delta_masked;
 }
 
+#endif  // defined(__AVX__)
+
 }  // namespace
 
 Image<Normal32f> ComputeNormalsLeastSqr(const IntrinsicParams& intrinsic_params,
@@ -79,6 +86,7 @@ Image<Normal32f> ComputeNormalsLeastSqr(const IntrinsicParams& intrinsic_params,
   const int32_t w = depth.cols();
   const int32_t r = radius;
 
+#if defined(__AVX__)
   const __m256 avx_inf = _mm256_set1_ps(std::numeric_limits<float>::infinity());
   const __m256 avx_nan =
       _mm256_set1_ps(std::numeric_limits<float>::quiet_NaN());
@@ -140,6 +148,47 @@ Image<Normal32f> ComputeNormalsLeastSqr(const IntrinsicParams& intrinsic_params,
       StoreNormals(avx_nx, avx_ny, avx_nz, x, row, dst);
     }
   });
+#else
+  // Portable version of the AVX code above, e.g. for arm64: the same pixels,
+  // with exact instead of approximate reciprocals.
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const float fx = intrinsic_params.focal_length_x();
+  const float fy = intrinsic_params.focal_length_y();
+  const float cx = intrinsic_params.principal_point_x();
+  const float cy = intrinsic_params.principal_point_y();
+
+  ParallelFor(r, depth.rows() - r, [&](int32_t row) {
+    // The AVX code processes blocks of 8 pixels that end before w - r.
+    for (int32_t x0 = r; x0 < w - r - 8; x0 += 8) {
+      for (int32_t x = x0; x < x0 + 8; ++x) {
+        const float d = depth(x, row);
+        float A0 = 0, A1 = 0, A2 = 0, b0 = 0, b1 = 0;
+        for (int32_t m = -r; m <= r; m += step) {
+          for (int32_t n = -r; n <= r; n += step) {
+            const float delta = depth(x + n, row + m) - d;
+            // False for NaN, like the AVX comparison.
+            if (!(std::abs(delta) < threshold)) continue;
+            A0 += n * n;
+            A1 += n * m;
+            A2 += m * m;
+            b0 += n * delta;
+            b1 += m * delta;
+          }
+        }
+        float div = 1.0f / (A0 * A2 - A1 * A1);
+        if (std::isinf(div)) div = nan;
+        const float ddx = (A2 * b0 - A1 * b1) * div;
+        const float ddy = (-A1 * b0 + A0 * b1) * div;
+        float nx = ddx * fx;
+        float ny = ddy * fy;
+        float nz = -(d + ddx * (x - cx) + ddy * (row - cy));
+        float fac = 1.0f / std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (std::isinf(fac)) fac = nan;
+        dst(x, row) = {nx * fac, ny * fac, nz * fac};
+      }
+    }
+  });
+#endif  // defined(__AVX__)
   return dst;
 }
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 
 package(default_visibility = [
     "//visibility:public",
@@ -71,20 +71,36 @@ cc_library(
     name = "compute_normals_least_sqr",
     srcs = ["compute_normals_least_sqr.cc"],
     hdrs = ["compute_normals_least_sqr.h"],
-    copts = [
-        "-mavx",
-        "-msse2",
-        "-mssse3",
-        "-msse3",
-        "-msse4.1",
-        "-msse4.2",
-    ],
+    # Uses AVX on x86_64, and portable code elsewhere.
+    copts = select({
+        "@platforms//cpu:x86_64": [
+            "-mavx",
+            "-msse2",
+            "-mssse3",
+            "-msse3",
+            "-msse4.1",
+            "-msse4.2",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":image",
         ":image_traits",
         ":intrinsic_params",
         ":parallel",
         "@abseil-cpp//absl/log:check",
+    ],
+)
+
+cc_test(
+    name = "compute_normals_least_sqr_test",
+    srcs = ["compute_normals_least_sqr_test.cc"],
+    deps = [
+        ":compute_normals_least_sqr",
+        ":image",
+        ":image_traits",
+        ":intrinsic_params",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
