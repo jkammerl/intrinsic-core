@@ -46,7 +46,7 @@ service_def {
       }
     }
     extra_images {
-      archive_filename: "triton_inference_server_image.tar"
+      archive_filename: "onnxruntime_server_image.tar"
       settings {
         volume_mounts {
           name: "models-volume"
@@ -56,14 +56,7 @@ service_def {
           name: "inference-shm"
           mount_path: "/dev/shm"
         }
-        resource_requirements {
-          limits {
-            key: "nvidia.com/gpu"
-            value: "1"
-          }
-        }
         args: [
-          "tritonserver",
           "--model-repository=/models",
           "--allow-client-shm=true",
           "--allow-http=false",
@@ -74,7 +67,7 @@ service_def {
           "--model-control-mode=explicit",
           "--trace-config=mode=opentelemetry",
           "--trace-config=opentelemetry,url=http://oc-agent.app-intrinsic-base.svc.cluster.local:4318/v1/traces",
-          "--trace-config=opentelemetry,resource=service.name=inference_service.triton",
+          "--trace-config=opentelemetry,resource=service.name=inference_service.onnxruntime",
           "--trace-config=rate=0",  # Only create trace when request has otel context attached.
           "--trace-config=level=TIMESTAMPS"
         ]
@@ -108,7 +101,7 @@ service_def {
       }
     }
     extra_images {
-      archive_filename: "triton_inference_server_image.tar"
+      archive_filename: "onnxruntime_server_image.tar"
       settings {
         volume_mounts {
           name: "models-volume"
@@ -118,14 +111,7 @@ service_def {
           name: "inference-shm"
           mount_path: "/dev/shm"
         }
-        resource_requirements {
-          limits {
-            key: "nvidia.com/gpu"
-            value: "1"
-          }
-        }
         args: [
-          "tritonserver",
           "--model-repository=/models",
           "--allow-client-shm=true",
           "--allow-http=false",
@@ -136,7 +122,7 @@ service_def {
           "--model-control-mode=explicit",
           "--trace-config=mode=opentelemetry",
           "--trace-config=opentelemetry,url=http://oc-agent.app-intrinsic-base.svc.cluster.local:4318/v1/traces",
-          "--trace-config=opentelemetry,resource=service.name=inference_service.triton",
+          "--trace-config=opentelemetry,resource=service.name=inference_service.onnxruntime",
           "--trace-config=rate=0",  # Only create trace when request has otel context attached.
           "--trace-config=level=TIMESTAMPS"
         ]

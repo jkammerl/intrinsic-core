@@ -94,15 +94,14 @@ py_binary(
     ] + [],
 )
 
-# Inference_service asset including either a multi-backend Triton inference service image
-# or a minimal CPU-only image. The minimal image is part of the presubmit tests while the
-# full image runs only in scheduled integration tests.
+# Inference_service asset. Models are served by the ONNX Runtime server, a
+# drop-in replacement for Triton that runs on CPUs and GPUs of any architecture.
 intrinsic_service(
     name = "inference_service_asset",
     default_config = "//intrinsic_inference/assets/inference_service/v1:default_inference_service_config_values.textproto",
     images = [
         ":inference_service_image.tar",
-        ":triton_inference_server_image.tar",
+        "//intrinsic_inference/onnxruntime_server:onnxruntime_server_image.tar",
     ],
     manifest = "inference_service.manifest.textproto",
     visibility = ["//visibility:public"],
@@ -119,6 +118,8 @@ python_oci_image(
     binary = "inference_service_main",
 )
 
+# Triton Inference Server, which the ONNX Runtime server replaced. It is x86_64
+# only and needs an NVIDIA GPU.
 container_image(
     name = "triton_inference_server_image",
     base = "@tritonserver-onprem",
