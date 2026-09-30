@@ -17,7 +17,7 @@ The tutorials are designed to be followed in sequential order:
 
 ### 1. [Getting Started](getting_started.md)
 * **Status**: Available
-* **Summary**: Set up your development environment and workstation on Ubuntu 26.04. Configure container runtime prerequisites (`k3s`, `git-lfs`), install the Intrinsic Control CLI ([`inctl`](../glossary/intrinsic_terms.md#inctl-intrinsic-control-cli)), deploy Intrinsic Core, and load the baseline Open Machine Tending Solution (OMTS).
+* **Summary**: Set up your development environment and workstation on Ubuntu 26.04 (x86-64 or arm64). Configure container runtime prerequisites (`k3s`, `git-lfs`), install the Intrinsic Control CLI ([`inctl`](../glossary/intrinsic_terms.md#inctl-intrinsic-control-cli)), deploy Intrinsic Core, and load the baseline Open Machine Tending Solution (OMTS).
 
 ### 2. [Visualize the Robot](visualize_the_robot.md)
 * **Status**: Available

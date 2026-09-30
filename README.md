@@ -38,6 +38,8 @@ Intrinsic Core also includes an open-source Machine Tending reference design [in
 ## Prerequisites
 
 - Operating system: Ubuntu 24.04 LTS (Noble) or Ubuntu 26.04 LTS (Ubuntu 22.04 LTS supported)
+- CPU architecture: x86-64, or arm64 (aarch64) for simulation; see [Run Intrinsic Core on arm64](developer_resources/guides/run_on_arm64.md)
+- GPU: optional; an NVIDIA GPU speeds up ML inference
 - ROS 2 distribution: ROS 2 Lyrical Luth
 
 ## Resources and related repositories

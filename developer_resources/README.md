@@ -18,5 +18,7 @@ This directory contains documentation for Intrinsic Core.
 
 ## Guides
 
+- [Run Intrinsic Core on arm64](guides/run_on_arm64.md) — install Intrinsic
+  Core on arm64 hosts and port Solutions to arm64.
 - [Universal Robots RTDE setup](guides/commission_solution/set_up_robot/universal_robots_setup.md)
 - [KUKA RSI setup](guides/commission_solution/set_up_robot/kuka_rsi_setup.md)

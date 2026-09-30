@@ -9,9 +9,12 @@ This guide walks through setting up your first Intrinsic Core environment and lo
 
 Intrinsic Core requires Ubuntu 26.04. To visualize your solution, we recommend installing [Ubuntu 26.04 Desktop](https://ubuntu.com/desktop/docs/en/latest/tutorial/install-ubuntu-desktop/).
 
+> [!NOTE]
+> This guide is for x86-64 PCs. Intrinsic Core also runs on arm64 (aarch64) hosts, for example NVIDIA DGX Spark or a Linux VM on an Apple silicon Mac. On arm64, follow the steps marked **arm64** below, and see [Run Intrinsic Core on arm64](../../guides/run_on_arm64.md) for details.
+
 ## Recommended computer specs
 
-* **CPU**: x86-64 Architecture (6-core / 12-thread @ 4.9 GHz or higher, e.g.,Intel i7-13700 or better). Note: For realtime control of [robot](../glossary/general_terms.md#robot) hardware, you'll need an Intel CPU, although for [simulation](../glossary/general_terms.md#simulation), you can also use AMD CPUs. ARM architectures are strictly unsupported at this time.
+* **CPU**: x86-64 Architecture (6-core / 12-thread @ 4.9 GHz or higher, e.g.,Intel i7-13700 or better). Note: For realtime control of [robot](../glossary/general_terms.md#robot) hardware, you'll need an Intel CPU, although for [simulation](../glossary/general_terms.md#simulation), you can also use AMD CPUs. arm64 (aarch64) CPUs are supported for simulation; see [Run Intrinsic Core on arm64](../../guides/run_on_arm64.md).
 * **GPU**: Integrated Graphics sufficient for simulation. A dedicated NVIDIA RTX 3060/4060+ is recommended for ML/Vision workloads: without one, perception in OMTS runs on the CPU, which takes minutes instead of seconds per detection.
 * **RAM**: 32 GiB DDR4/DDR5 minimum (64 GiB recommended). Note: Small solutions may even work on smaller systems (16 GiB), but you'll need to take care to run builds with a limit on the number of jobs and to stop the solution before running builds. Alternatively, running builds and visualization on another PC takes the load off the real-time PC's memory. 
 * **Storage**: 1 TB NVMe SSD (minimum 100 GB dedicated free space).
@@ -67,6 +70,13 @@ Intrinsic Core uses [Kubernetes](../glossary/general_terms.md#kubernetes-k8s) to
 
 6. Download and deploy Intrinsic Core:
 
+   > **arm64:** The release is only built for x86-64. Instead, install Bazelisk as described in [Step 2](#step-2-build-and-deploy-omts), then build and deploy Intrinsic Core from source. This can take an hour or more:
+   >
+   > ```bash
+   > cd ~/intrinsic-core
+   > bazel run //intrinsic_runtime/kubernetes/intrinsic_base:intrinsic-base
+   > ```
+
    ```bash
    gh release download --repo intrinsic-ai/intrinsic-core 20260922.0 \
      --pattern intrinsic-base-linux-amd64.tar \
@@ -88,6 +98,14 @@ Intrinsic Core uses [Kubernetes](../glossary/general_terms.md#kubernetes-k8s) to
 
 7. Install the [inctl](../glossary/intrinsic_terms.md#inctl-intrinsic-control-cli) ("in control") CLI, which you'll use to control Intrinsic Core:
 
+   > **arm64:** Build inctl from source instead:
+   >
+   > ```bash
+   > cd ~/intrinsic-core
+   > bazel build //intrinsic/tools/inctl:inctl_external
+   > sudo install -m 755 bazel-bin/intrinsic/tools/inctl/inctl_external /usr/local/bin/inctl
+   > ```
+
    ```bash
    gh release download --repo intrinsic-ai/intrinsic-core 20260922.0 \
      --pattern inctl-linux-amd64 \
@@ -108,6 +126,8 @@ Now Intrinsic Core is running, we can prepare to build and deploy the Open Machi
 
 1. Before building a Solution, you'll need to install the [Bazel](https://bazel.build/) build system. We'll use Bazelisk, which manages Bazel versions:
 
+   On arm64, replace `bazelisk-linux-amd64` with `bazelisk-linux-arm64`.
+
    ```bash
    curl -L "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" -o /tmp/bazelisk
    sudo mv /tmp/bazelisk /usr/bin/bazelisk
@@ -118,7 +138,7 @@ Now Intrinsic Core is running, we can prepare to build and deploy the Open Machi
 2. We also need this symlink for compatibility between the version of LLVM used by OMTS and Ubuntu 26.04:
 
    ```bash
-   sudo ln -s /usr/lib/x86_64-linux-gnu/libxml2.so.16 /usr/lib/x86_64-linux-gnu/libxml2.so.2
+   sudo ln -s /usr/lib/$(uname -m)-linux-gnu/libxml2.so.16 /usr/lib/$(uname -m)-linux-gnu/libxml2.so.2
    ```
 
 3. Compile and run the Open Machine Tending Solution using Bazel:
@@ -157,6 +177,7 @@ Now Intrinsic Core is running, we can prepare to build and deploy the Open Machi
 | Error: failed to process Asset ai.intrinsic.omts_enclosure: failed to process SceneObject bundle: failed to process bundle from ...: failed to walk tar file to process assets: error processing file "omts_enclosure_scene_object.gzf": failed to process object: could not upload "3b31bd16a12c40bf" to CAS: failed to upload to CAS: closing stream: rpc error: code = Unimplemented desc = | A required Runtime service is not running. | Retry the step "Download and deploy Intrinsic Core". Because Intrinsic Core runs inside Kubernetes, we can use k9s, a terminal UI for managing Kubernetes, to check the logs.<br>In the terminal, run: `k9s -n app-intrinsic-base -c pods`.<br>The Runtime of Intrinsic Core runs as Kubernetes "[pods](../glossary/general_terms.md#pod)" in a namespace called "app-intrinsic-base": Check that these are healthy. |
 | Error: failed to process Asset ai.intrinsic.attach_object_to_robot: failed to process Skill bundle: failed to process bundle from ...: failed to walk tar file to process assets: error processing file "attach_object_to_robot_skill_image.tar": failed to process image: image write failed: check image failed: rpc error: code = Unknown desc = failed to dial "/run/containerd/containerd.sock": connection error: desc = "transport: error while dialing: dial unix /run/containerd/containerd.sock: connect: connection refused" | The service that manages Asset container images cannot connect to containerd, the daemon that runs containers. | Restart the service: In the terminal, run: `k9s -n app-intrinsic-base -c pods`.<br>Select the line "artifacts-deployment-...", press Ctrl+D to delete the pod, and select Enter, then retry. |
 | Error: failed to process Asset ai.intrinsic.inference_service: failed to process Service bundle: failed to process bundle from...: failed to walk tar file <br>to process assets: error processing file "onnxruntime_server_image.tar": failed to process image: could not process tar file "onnxruntime_server_image.tar": failed to write reader data to temp file: write /tmp/read-opener-120377528: disk quota exceeded<br>(or "no space left on device") | Your /tmp is either too small, or has a restrictive quota, and the large container images in the OTMS solution fill it up. | `mkdir -p ~/tmp`<br>`TMPDIR=~/tmp bazel run //:omts_solution -- --address localhost:17080 --operation_mode=sim` |
+| `exec format error` when running `/tmp/intrinsic-base` or `inctl`, or pods failing with `exec format error` | The PC has an arm64 CPU, but the release artifacts are built for x86-64. | Build them from source, following the **arm64** notes above and [Run Intrinsic Core on arm64](../../guides/run_on_arm64.md). |
 | `failed to get solution information: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 10.43.123.92:9777: connect: connection refused"` or `Error: failed to process Asset ai.intrinsic.ioc_pose_estimation.pose_estimator.foundationpose: failed to process Data Asset bundle: failed to read Data bundle: failed to process in-tar reference "data_files/foundationpose_refine.onnx": failed to start upload: rpc error: code = Internal desc = failed to create CAS stream: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 10.43.248.104:9747: connect: connection refused"` | The IP address of your PC may have changed since it was initially set up. | Reconfigure your PC to use a fixed DHCP lease or static IP. Remove k3s, then follow [Getting started](getting_started.md) to set it up fresh: `sudo /usr/local/bin/k3s-uninstall.sh` then `sudo rm -rf /var/lib/rancher /etc/rancher/ /var/lib/longhorn/ /etc/cni/` |
 
 ## Next steps
