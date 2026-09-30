@@ -29,7 +29,7 @@ use_task_planner: false
 
 # Image of the code execution service's Jupyter server. Empty uses the released
 # image pinned in code-execution.yaml, which is amd64-only.
-code_execution_jupyter_image: ""
+code_execution_jupyter_image: "localhost/code-execution-jupyter-server:arm64"
 
 executive_flags:
   # Normally, footprints are generated through skill projection and then checked
