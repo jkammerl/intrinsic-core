@@ -118,7 +118,8 @@ def python_layers(name, binary, **kwargs):
 
     # One layer with only the python interpreter.
     # Bzlmod: "runfiles/rules_python~0.27.1~python~python_3_11_x86_64-unknown-linux-gnu/"
-    PY_INTERPRETER_REGEX = "\\S*\\.runfiles/\\S*\\(rules_python\\S*_x86_64-unknown-linux-gnu/\\|.*rules_Upython++python+python.*libpython.*\\)"
+    # (or "..._aarch64-unknown-linux-gnu/" for arm64 images).
+    PY_INTERPRETER_REGEX = "\\S*\\.runfiles/\\S*\\(rules_python\\S*_\\(x86_64\\|aarch64\\)-unknown-linux-gnu/\\|.*rules_Upython++python+python.*libpython.*\\)"
 
     native.genrule(
         name = name + "_interpreter_tar_manifest",
