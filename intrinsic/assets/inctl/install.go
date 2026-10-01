@@ -31,6 +31,7 @@ import (
 	"intrinsic/assets/referenceddata"
 	"intrinsic/assets/scene_objects/gzfprocessor"
 	"intrinsic/assets/services/bundleimages"
+	"intrinsic/assets/throttle"
 	"intrinsic/skills/tools/skill/cmd/directupload/directupload"
 	"intrinsic/storage/content_addressable_storage/pkg/filetocas" 
 	"intrinsic/tools/inctl/util/casgeometryuploader"              
@@ -56,17 +57,20 @@ import (
 // Further validation is needed on both parts to ensure validity.
 var solutionAssetRegex = regexp.MustCompile(`^(?P<branch>[A-Za-z0-9_\-]+)/(?P<asset>[a-z0-9_\.]+)$`)
 
+
 const (
-	// numGeoUploadWorkers enables parallelization of geometry uploads while processing the Asset.
+	// numGeoUploadWorkers enables parallelization of legacy CAS geometry uploads while processing the Asset.
 	numGeoUploadWorkers = 8
 )
+
+
 
 // GetCommand returns a command to install an asset.
 func GetCommand() *cobra.Command {
 	flags := cmdutils.NewCmdFlags()
 	cmd := &cobra.Command{
-		Use:   "install <asset_id_version>",
-		Short: "Install an Asset",
+		Use:   "install <asset>...",
+		Short: "Install one or more Assets",
 		Example: `
   Install a local Asset bundle into the specified Solution:
   $ inctl asset install abc/bundle.tar \
@@ -83,16 +87,21 @@ func GetCommand() *cobra.Command {
       --org $my_org \
       --solution $my_solution_id
 
+  Install multiple Assets into the specified Solution:
+  $ inctl asset install abc/bundle.tar ai.intrinsic.calculator_service.0.20260126.0-RC00 \
+      --org $my_org \
+      --solution $my_solution_id
+
   To find a running Solution's id, run:
   $ inctl solution list --org $my_org --filter "running_on_hw,running_in_sim" --output json
 
   The Asset can also be installed by specifying the cluster on which the Solution is running:
   $ inctl asset install $my_asset --org $my_org --cluster $my_cluster
 `,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			target := args[0]
+			targets := args
 
 			policy, err := flags.GetFlagPolicy()
 			if err != nil {
@@ -103,11 +112,13 @@ func GetCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to add org information to context: %w", err)
 			}
-			ctx, conn, _, err := clientutils.DialClusterFromInctl(ctx, flags)
+			ctx, rawConn, _, err := clientutils.DialClusterFromInctl(ctx, flags)
 			if err != nil {
 				return err
 			}
-			defer conn.Close()
+			defer rawConn.Close()
+
+			conn := throttle.ConnectionWithRateLimit(rawConn, flags.GetFlagRateLimit(), flags.GetFlagRateBurst())
 
 			// Determine the image transferer to use. Default to direct injection into the cluster.
 			var transfer imagetransfer.Transferer
@@ -139,27 +150,31 @@ func GetCommand() *cobra.Command {
 				lropb.NewOperationsClient(conn),
 				referenceddata.WithProgressWriter(cmd.OutOrStdout()),
 			)
+			processingLimiter := throttle.NewConcurrencyLimiter(flags.GetFlagProcessingConcurrency())
 			processor := &bundle.Processor{
 				ImageProcessor:          bundleimages.CreateImageProcessor(transfer),
 				ReferencedDataProcessor: rdProcessor,
 				GZFProcessor: gzfprocessor.New(
 					rdProcessor,
 					gzfprocessor.WithLegacyUploader(uploader), 
-					gzfprocessor.WithConcurrencyLimit(numGeoUploadWorkers),
+					gzfprocessor.WithConcurrencyLimiter(processingLimiter),
 				),
 			}
 
-			asset, err := assetFromTarget(ctx, target, processor.ProcessFile)
+			// Prepare all assets client-side (parsing catalog refs, solution refs,
+			// or processing local bundle files) into proto messages.
+			assets, err := assetsFromTargets(ctx, targets, processor.ProcessFile, processingLimiter)
 			if err != nil {
 				return err
 			}
 
-			op, err := client.CreateInstalledAsset(ctx, &iapb.CreateInstalledAssetRequest{
+			// Call the batch CreateInstalledAssets API once with all assets together.
+			op, err := client.CreateInstalledAssets(ctx, &iapb.CreateInstalledAssetsRequest{
 				Policy: policy,
-				Asset:  asset,
+				Assets: assets,
 			})
 			if err != nil {
-				return fmt.Errorf("could not install the asset: %v", err)
+				return fmt.Errorf("could not install the assets: %w", err)
 			}
 
 			log.Printf("Awaiting completion of the installation")
@@ -176,18 +191,21 @@ func GetCommand() *cobra.Command {
 			if err := status.ErrorProto(op.GetError()); err != nil {
 				return fmt.Errorf("installation failed: %w", err)
 			}
-			installed := &iapb.InstalledAsset{}
+			installed := &iapb.CreateInstalledAssetsResponse{}
 			if err := op.GetResponse().UnmarshalTo(installed); err != nil {
 				return fmt.Errorf("unable to parse result from successful installation: %w", err)
 			}
-			log.Printf("Finished installing %q", idutils.IDVersionFromProtoUnchecked(installed.GetMetadata().GetIdVersion()))
+			for _, item := range installed.GetInstalledAssets() {
+				idv := idutils.IDVersionFromProtoUnchecked(item.GetMetadata().GetIdVersion())
+				log.Printf("Finished installing %q", idv)
+			}
 			if op.GetMetadata() != nil {
-				metadata := &iapb.CreateInstalledAssetMetadata{}
+				metadata := &iapb.CreateInstalledAssetsMetadata{}
 				if err := op.GetMetadata().UnmarshalTo(metadata); err != nil {
 					log.Printf("failed to check for warnings: failed to unmarshal operation metadata: %v", err)
 				} else if metadata.GetWarnings() != nil {
 					ext := extstatus.FromProto(metadata.GetWarnings())
-					color.C.Yellow().Printf("\nWARNING: Installation of %q succeeded with warnings:\n%v\n", idutils.IDVersionFromProtoUnchecked(installed.GetMetadata().GetIdVersion()), ext)
+					color.C.Yellow().Printf("\nWARNING: Installation succeeded with warnings:\n%v\n", ext)
 				}
 			}
 			return nil
@@ -198,6 +216,8 @@ func GetCommand() *cobra.Command {
 	flags.AddFlagsAddressClusterSolution()
 	flags.AddFlagPolicy("asset")
 	flags.AddFlagsProjectOrg()
+	flags.AddFlagsRateLimit(throttle.OnPremRateLimit, throttle.OnPremBurst)
+	flags.AddFlagProcessingConcurrency(throttle.LocalProcessingConcurrency)
 	flags.AddFlagRegistry()
 	flags.AddFlagsRegistryAuthUserPassword()
 	flags.AddFlagSkipDirectUpload("asset")
@@ -207,7 +227,26 @@ func GetCommand() *cobra.Command {
 
 type processBundle func(ctx context.Context, path string) (bundle.ProcessedBundle, error)
 
-func assetFromTarget(ctx context.Context, target string, process processBundle) (*iapb.CreateInstalledAssetRequest_Asset, error) {
+func assetsFromTargets(ctx context.Context, targets []string, process processBundle, limiter *throttle.ConcurrencyLimiter) ([]*iapb.CreateInstalledAssetsRequest_Asset, error) {
+	assets := make([]*iapb.CreateInstalledAssetsRequest_Asset, len(targets))
+	fns := make([]func(context.Context) error, len(targets))
+	for i, target := range targets {
+		fns[i] = func(ctx context.Context) error {
+			asset, err := assetFromTarget(ctx, target, process)
+			if err != nil {
+				return err
+			}
+			assets[i] = asset
+			return nil
+		}
+	}
+	if err := limiter.Do(ctx, fns...); err != nil {
+		return nil, err
+	}
+	return assets, nil
+}
+
+func assetFromTarget(ctx context.Context, target string, process processBundle) (*iapb.CreateInstalledAssetsRequest_Asset, error) {
 	fileExists := false
 	if _, err := os.Stat(target); err == nil {
 		fileExists = true
@@ -227,16 +266,16 @@ func assetFromTarget(ctx context.Context, target string, process processBundle) 
 	}
 
 	if isIDVersion {
-		return &iapb.CreateInstalledAssetRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetRequest_Asset_Catalog{
+		return &iapb.CreateInstalledAssetsRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetsRequest_Asset_Catalog{
 				Catalog: idvParts.IDVersionProto(),
 			},
 		}, nil
 	}
 
 	if isSolutionAsset {
-		return &iapb.CreateInstalledAssetRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetRequest_Asset_SolutionAsset{
+		return &iapb.CreateInstalledAssetsRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetsRequest_Asset_SolutionAsset{
 				SolutionAsset: &rpb.SolutionAsset{
 					BranchId: solutionAssetMatches[solutionAssetRegex.SubexpIndex("branch")],
 					Name:     solutionAssetMatches[solutionAssetRegex.SubexpIndex("asset")],
@@ -250,7 +289,7 @@ func assetFromTarget(ctx context.Context, target string, process processBundle) 
 		if err != nil {
 			return nil, fmt.Errorf("unable to process file: %w", err)
 		}
-		return processedBundle.Install(), nil
+		return processedBundle.InstallBatch(), nil
 	}
 
 	return nil, fmt.Errorf("%q is not a file, id_version, or Solution Asset; check that the input is formatted correctly", target)

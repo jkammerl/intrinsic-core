@@ -33,6 +33,7 @@ import (
 	"intrinsic/assets/referenceddata"
 	"intrinsic/assets/scene_objects/gzfprocessor"
 	"intrinsic/assets/services/bundleimages"
+	"intrinsic/assets/throttle"
 	"intrinsic/config/operationmode"
 	intrinsicinit "intrinsic/production/intrinsic"
 	"intrinsic/skills/tools/skill/cmd/directupload/directupload"
@@ -239,18 +240,21 @@ $ bazel run //intrinsic/config:empty_application --\
 				return err
 			}
 
-			ctx, ingressConnection, _, err := clientutils.DialClusterFromInctl(ctx, flags)
+			ctx, rawIngressConn, _, err := clientutils.DialClusterFromInctl(ctx, flags)
 			if err != nil {
 				return errors.Wrap(err, "cannot connect to cluster")
 			}
-			defer ingressConnection.Close()
+			defer rawIngressConn.Close()
 
-			casClient := casgrpcpb.NewContentAddressableStorageServiceClient(ingressConnection)
+			ingressConn := throttle.ConnectionWithRateLimit(rawIngressConn, flags.GetFlagRateLimit(), flags.GetFlagRateBurst())
+
+			casClient := casgrpcpb.NewContentAddressableStorageServiceClient(ingressConn)
 			f2c := filetocas.NewUploader(
 				casClient,
 				filetocas.WithRunfilesFS(runfilesFS),
 				filetocas.UseChunkSize(releaseutil.CASUploadChunkSize),
 			)
+			processingLimiter := throttle.NewConcurrencyLimiter(flags.GetFlagProcessingConcurrency())
 			gu, err := casgeometryuploader.New(f2c, 8)
 			if err != nil {
 				return fmt.Errorf("failed to create a CAS geometry uploader: %w", err)
@@ -264,7 +268,7 @@ $ bazel run //intrinsic/config:empty_application --\
 			}
 			if !flags.GetFlagSkipDirectUpload() {
 				transfer = directupload.NewTransferer(
-					directupload.WithDiscovery(directupload.NewFromConnection(ingressConnection)),
+					directupload.WithDiscovery(directupload.NewFromConnection(ingressConn)),
 					directupload.WithOutput(cmd.OutOrStdout()),
 					directupload.WithFailOver(transfer),
 				)
@@ -277,15 +281,19 @@ $ bazel run //intrinsic/config:empty_application --\
 			// and populate the Assets and Instances maps in the Application proto.
 			startProcessAssets := time.Now()
 			baseRDProcessor := referenceddata.NewProcessor(
-				assetartifactspb.NewAssetArtifactsClient(ingressConnection),
-				lropb.NewOperationsClient(ingressConnection),
+				assetartifactspb.NewAssetArtifactsClient(ingressConn),
+				lropb.NewOperationsClient(ingressConn),
 			)
 			rdProcessor := cascopyprocessor.New(baseRDProcessor, project, casClient)
 			defer rdProcessor.Close()
 			proc := &assetprocessor.Processor{
 				Processor: bundle.Processor{
-					ImageProcessor:          bundleimages.CreateImageProcessor(transfer),
-					GZFProcessor:            gzfprocessor.New(rdProcessor, gzfprocessor.WithLegacyUploader(gu)),
+					ImageProcessor: bundleimages.CreateImageProcessor(transfer),
+					GZFProcessor: gzfprocessor.New(
+						rdProcessor,
+						gzfprocessor.WithLegacyUploader(gu),
+						gzfprocessor.WithConcurrencyLimiter(processingLimiter),
+					),
 					ReferencedDataProcessor: rdProcessor,
 				},
 				PathResolver: func(path string) (string, error) {
@@ -295,6 +303,7 @@ $ bazel run //intrinsic/config:empty_application --\
 					}
 					return r.Rlocation(path)
 				},
+				ConcurrencyLimiter: processingLimiter,
 			}
 			app, err := proc.Process(ctx, assets)
 			if err != nil {
@@ -308,14 +317,14 @@ $ bazel run //intrinsic/config:empty_application --\
 			dProcessAssets := time.Since(startProcessAssets)
 
 			startDeployApplication := time.Now()
-			deployClient := deploygrpcpb.NewDeployServiceClient(ingressConnection)
+			deployClient := deploygrpcpb.NewDeployServiceClient(ingressConn)
 			if err := deployApplication(ctx, deployClient, app); err != nil {
 				return fmt.Errorf("deploy application: %w", err)
 			}
 			dDeployApplication := time.Since(startDeployApplication)
 
 			startWaitForReady := time.Now()
-			solutionServiceClient := solutionservicegrpcpb.NewSolutionServiceClient(ingressConnection)
+			solutionServiceClient := solutionservicegrpcpb.NewSolutionServiceClient(ingressConn)
 			if err := waitForReady(ctx, solutionServiceClient, os.Stdout); err != nil {
 				return fmt.Errorf("wait for chart assignment ready: %w", err)
 			}
@@ -335,6 +344,8 @@ $ bazel run //intrinsic/config:empty_application --\
 	flags.SetCommand(cmd)
 	flags.AddFlagsProjectOrg()
 	flags.AddFlagsAddressClusterSolution()
+	flags.AddFlagsRateLimit(throttle.OnPremRateLimit, throttle.OnPremBurst)
+	flags.AddFlagProcessingConcurrency(throttle.LocalProcessingConcurrency)
 	flags.AddFlagRegistry()
 	flags.AddFlagsRegistryAuthUserPassword()
 	flags.AddFlagSkipDirectUpload("app")

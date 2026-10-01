@@ -44,7 +44,9 @@
 #include "grpcpp/support/status.h"
 #include "intrinsic/assets/id_utils.h"
 #include "intrinsic/eigenmath/types.h"
-#include "intrinsic/geometry/proto/transformed_geometry_storage_refs.pb.h"
+#include "intrinsic/geometry/api/affine_transform_of_geometry.h"
+#include "intrinsic/geometry/api/io.h"
+#include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
 #include "intrinsic/icon/proto/joint_space.pb.h"
@@ -93,6 +95,7 @@
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache_utils.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/skills/internal/world_service_utils.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/grpc/grpc.h"
 #include "intrinsic/util/proto/type_url.h"
@@ -227,27 +230,24 @@ absl::Status AddTypeUrlPrefixToPayload(const absl::Status& status) {
 
 absl::StatusOr<std::unique_ptr<object_world::ObjectWorld>> GetObjectWorldView(
     World& world) {
+  const stats::ScopedSpan span("motion_planning/GetObjectWorldView");
   INTR_ASSIGN_OR_RETURN(auto object_world,
                         object_world::ObjectWorld::CreateView(world));
   return object_world;
 }
 
-absl::StatusOr<
-    std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>>
+absl::StatusOr<std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>>
 ComputeSweptVolume(const World& world, const RobotCollectionsEntityId& robot_id,
                    GeometrySerializer& geolib, const PointPath& path) {
   INTR_ASSIGN_OR_RETURN(const auto shape_data,
                         ComputeSweptVolumeFromPath(world, robot_id, path));
 
-  std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs> result;
+  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> result;
   result.reserve(shape_data.size());
-  for (const auto& shape : shape_data) {
-    intrinsic_proto::geometry::TransformedGeometryStorageRefs shape_proto;
-    INTR_ASSIGN_OR_RETURN(const auto geometry_storage_ref,
-                          geolib.SaveGeometry(shape.shape()));
-    *shape_proto.mutable_geometry_storage_refs() = geometry_storage_ref;
-    *shape_proto.mutable_ref_t_shape_aff() =
-        intrinsic::ToProto(shape.ref_t_shape());
+  for (const TransformedGeometry& shape : shape_data) {
+    INTR_ASSIGN_OR_RETURN(
+        intrinsic_proto::geometry::v1::TransformedGeometry shape_proto,
+        intrinsic::geo::ToProto(shape, &geolib));
     result.push_back(std::move(shape_proto));
   }
   return result;
@@ -267,8 +267,7 @@ PointPath PathSegmentsToPath(const std::vector<PathSegment>& path_segments) {
   return path;
 }
 
-absl::StatusOr<
-    std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>>
+absl::StatusOr<std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>>
 ComputeSweptVolume(const World& world, const RobotCollectionsEntityId& robot_id,
                    GeometrySerializer& geolib,
                    const JointTrajectoryPVA& trajectory) {
@@ -285,15 +284,16 @@ absl::Status ComputeSweptVolumeForPathAndAssignToResponse(
     const World& world, const RobotCollectionsEntityId& robot_id,
     GeometrySerializer& geolib, const PointPath& path,
     intrinsic_proto::motion_planning::v1::PathPlanningResponse* response) {
-  std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>
-      swept_volumes;
+  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> swept_volumes;
   {
+    const stats::ScopedSpan span("MotionPlannerService/SweptVolume/Compute");
     INTR_ASSIGN_OR_RETURN(swept_volumes,
                           ComputeSweptVolume(world, robot_id, geolib, path));
   }
 
+  const stats::ScopedSpan span("MotionPlannerService/SweptVolume/Serialize");
   for (auto& swept_volume : swept_volumes) {
-    *response->add_swept_volume() = std::move(swept_volume);
+    *response->add_swept_volumes() = std::move(swept_volume);
   }
   return absl::OkStatus();
 }
@@ -303,15 +303,16 @@ absl::Status ComputeSweptVolumeAndAssignToResponse(
     GeometrySerializer& geolib, const JointTrajectoryPVA& trajectory,
     intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse*
         response) {
-  std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>
-      swept_volumes;
+  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> swept_volumes;
   {
+    const stats::ScopedSpan span("MotionPlannerService/SweptVolume/Compute");
     INTR_ASSIGN_OR_RETURN(
         swept_volumes, ComputeSweptVolume(world, robot_id, geolib, trajectory));
   }
 
+  const stats::ScopedSpan span("MotionPlannerService/SweptVolume/Serialize");
   for (auto& swept_volume : swept_volumes) {
-    *response->add_swept_volume() = std::move(swept_volume);
+    *response->add_swept_volumes() = std::move(swept_volume);
   }
   return absl::OkStatus();
 }
@@ -401,6 +402,7 @@ absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> GetProxyForPathPlanning(
         collision_checker_config,
     const intrinsic_proto::RuleSet& rule_set, bool require_ik_and_fk,
     bool disable_collision_checking) {
+  const stats::ScopedSpan span("motion_planning/GetProxyForPathPlanning");
   const World& world = object_world.GetEntityWorld();
 
   INTR_ASSIGN_OR_RETURN(const bool is_kinematic_chain,
@@ -758,6 +760,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context, const MotionPlanningRequest* request,
     intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse*
         response) {
+  const stats::ScopedSpan span("MotionPlannerService/PlanTrajectory", context);
   return PlanTrajectoryInternal(
       context, request, response,
       /*run_time_flags=*/std::nullopt);
@@ -766,6 +769,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
 ::grpc::Status MotionPlannerService::PlanPath(
     ::grpc::ServerContext* context, const MotionPlanningRequest* request,
     intrinsic_proto::motion_planning::v1::PathPlanningResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/PlanPath", context);
   TimingDebugLogger logger("MotionPlannerService::PlanPath");
   std::string cache_hit = "no";
 
@@ -845,6 +849,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::IkRequest* request,
     intrinsic_proto::motion_planning::v1::IkResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/ComputeIk", context);
   // Return error early for invalid max_num_solutions before doing any further
   // computations.
   if (request->max_num_solutions() < 0) {
@@ -931,6 +936,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::FkRequest* request,
     intrinsic_proto::motion_planning::v1::FkResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/ComputeFk", context);
   // Download the world from the world service.
   INTR_ASSIGN_OR_RETURN_GRPC(
       WorldAndProto initial_world_and_proto,
@@ -973,6 +979,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::CheckCollisionsRequest* request,
     intrinsic_proto::motion_planning::v1::CheckCollisionsResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/CheckCollisions", context);
   // Download the world from the world service.
   INTR_ASSIGN_OR_RETURN_GRPC(
       WorldAndProto initial_world_and_proto,

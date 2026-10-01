@@ -242,7 +242,7 @@ python.toolchain(
 bazel_dep(name = "pybind11_bazel", version = "3.0.1")
 bazel_dep(name = "pybind11_abseil", version = "202402.0")
 bazel_dep(name = "pybind11_protobuf", version = "0.0.0-20250210-f02a2b7")
-bazel_dep(name = "aspect_rules_lint", version = "2.9.0")  
+bazel_dep(name = "aspect_rules_lint", version = "2.9.1")  
 
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.parse(
@@ -398,12 +398,22 @@ rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2021",
     versions = [
-        "1.85.0",
+        "1.89.0",
     ],
 )
 use_repo(rust, "rust_toolchains")
 
 register_toolchains("@rust_toolchains//:all")
+
+bazel_dep(name = "rules_rs", version = "0.0.109")
+rules_rs_toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+rules_rs_toolchains.toolchain(
+    name = "rust_1_89_toolchains",
+    edition = "2021",
+    version = "1.89.0",
+)
+use_repo(rules_rs_toolchains, "rust_1_89_toolchains")
+register_toolchains("@rust_1_89_toolchains//...")
 
 
 #########
@@ -465,13 +475,13 @@ bazel_dep(name = "boost.logic", version = "1.90.0.bcr.1")  # used by cgal
 bazel_dep(name = "boost.math", version = "1.90.0.bcr.1")  
 bazel_dep(name = "boost.multiprecision", version = "1.90.0.bcr.1")  # used by cgal 
 bazel_dep(name = "boost.regex", version = "1.90.0.bcr.1")  
-bazel_dep(name = "boringssl", version = "0.20260813.0")
+bazel_dep(name = "boringssl", version = "0.20260929.0")
 bazel_dep(name = "brotli_go", version = "1.2.0", repo_name = "org_brotli_go")  
 bazel_dep(name = "brotli", version = "1.2.0.bcr.3", repo_name = "org_brotli")  
 bazel_dep(name = "cel-cpp", version = "0.14.0", repo_name = "com_google_cel_cpp")
 bazel_dep(name = "cel-spec", version = "0.25.3", repo_name = "com_google_cel_spec")
 bazel_dep(name = "ceres-solver", version = "2.2.0", repo_name = "com_google_ceres_solver")
-bazel_dep(name = "clarabel", version = "0.11.1.bcr.1")  
+bazel_dep(name = "clarabel", version = "0.11.1.bcr.2")  
 bazel_dep(name = "cli11", version = "2.6.2")  
 bazel_dep(name = "coacd", version = "1.0.13.bcr.1")  
 bazel_dep(name = "com_github_mvukov_rules_ros2", version = "0.0.0-20260718-352a8e3")
@@ -509,7 +519,7 @@ bazel_dep(name = "googleapis-cc", version = "1.1.5")
 bazel_dep(name = "googleapis-go", version = "1.1.5")
 bazel_dep(name = "googleapis-grpc-cc", version = "1.1.5")
 bazel_dep(name = "googleapis-python", version = "1.1.5")
-bazel_dep(name = "googleapis", version = "0.0.0-20260825-d10ac924", repo_name = "com_google_googleapis")
+bazel_dep(name = "googleapis", version = "0.0.0-20260922-d6b44118", repo_name = "com_google_googleapis")
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", repo_name = "com_google_googletest")
 bazel_dep(name = "grpc_ecosystem_grpc_gateway", version = "2.29.0.bcr.3", repo_name = "com_github_grpc_ecosystem_grpc_gateway_v2")
 bazel_dep(name = "grpc", version = "1.74.0", repo_name = "com_github_grpc_grpc")
@@ -534,6 +544,7 @@ bazel_dep(name = "libzip", version = "1.11.4.bcr.3")
 bazel_dep(name = "llvm-project", version = "17.0.3", repo_name = "com_github_llvm_llvm-project")  
 bazel_dep(name = "magic_enum", version = "0.9.8")  
 bazel_dep(name = "mcap", version = "2.1.3")  
+bazel_dep(name = "meshoptimizer", version = "1.3.bcr.1")
 bazel_dep(name = "nanopb", version = "0.3.9.10")  
 bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.2", repo_name = "com_github_nlohmann_json")
 bazel_dep(name = "nlopt", version = "2.10.1.bcr1")  
@@ -588,7 +599,7 @@ bazel_dep(name = "websocketpp", version = "0.8.2.bcr.6")  # bumping transitive d
 bazel_dep(name = "wsg32", version = "0.0.0-20250117-f73c045")  
 bazel_dep(name = "xacro", version = "2.0.12")  
 bazel_dep(name = "yaml-cpp", version = "0.9.0.bcr.1")  
-bazel_dep(name = "zenoh-c", version = "1.7.2.bcr.1")
+bazel_dep(name = "zenoh-c", version = "1.8.0.bcr.1")
 bazel_dep(name = "zlib", version = "1.3.2")  
 
 
@@ -692,10 +703,10 @@ oci.pull(
 )
 oci.pull(
     name = "tensorflow_serving",
-    digest = "sha256:67153005c5c5dea9cde7c4dddd69f96728412699e94a4d0e9893666084e1e944",
+    digest = "sha256:3930bdf5b6f1cac4c2e2d6920da491982b8c5f68a32d2688b558c6ba97bde4cc",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/tensorflow/serving",
     platforms = ["linux/amd64"],
-    tag = "2.20.0-gpu",  # tag needs to be specified for renovatebot to sync the digest
+    tag = "2.21.0-gpu",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
     name = "terraform_base",
@@ -747,10 +758,10 @@ oci.pull(
 # are not required.
 oci.pull(
     name = "tritonserver-cpu",
-    digest = "sha256:48ed7ee5f91189b4d98d90bffce503f1ac6127f9a234bad30511399102f5be4e",
-    image = "gcr.io/giza-workcells/tritonserver-input-validation",
+    digest = "sha256:e24bc1f53155c2e37212f00053fdf382b91033b4fc20e779b3468a76f3b90667",
+    image = "gcr.io/giza-workcells/tritonserver-base",
     platforms = ["linux/amd64"],
-    tag = "25.06-py3-cpu-v1",
+    tag = "25.06-py3-cpu-v3",
 )
 
 # Minimal Triton image with TF support for presubmits, validation and testing with legacy TF models.
@@ -765,10 +776,10 @@ oci.pull(
 # IVM-specific tritonserver image used in cloud deployments.
 oci.pull(
     name = "tritonserver-ivm",
-    digest = "sha256:1d285506a1da48af22d92c8103e13e32f9b24486f57f5c4a09e0057eee5f4d3a",
+    digest = "sha256:8016f5526ef33e110b536d7be75e944e7f6f860cf772b6f9bced6d964ae7fde1",
     image = "gcr.io/giza-workcells/tritonserver-ivm",
     platforms = ["linux/amd64"],
-    tag = "25.06-py3",
+    tag = "25.06-py3-v2",
 )
 
 # This image is updated manually via //incode/agent/agents/hmi/sandbox_runner/base_image:build_and_push.
@@ -940,11 +951,11 @@ _ZENOHD_BUILD_FILE = """exports_files(glob(["*"]))"""
         name = "zenohd_%s" % cpu,
         build_file_content = _ZENOHD_BUILD_FILE,
         sha256 = sha256,
-        urls = ["https://github.com/eclipse-zenoh/zenoh/releases/download/1.7.2/zenoh-1.7.2-%s-unknown-linux-gnu-standalone.zip" % cpu],
+        urls = ["https://github.com/eclipse-zenoh/zenoh/releases/download/1.8.0/zenoh-1.8.0-%s-unknown-linux-gnu-standalone.zip" % cpu],
     )
     for cpu, sha256 in [
-        ("x86_64", "d59cb50835078bfe3e49e7a3b3041c3dbb48e243a1e853f6012565ac91f1305a"),
-        ("aarch64", "2fcf8415b59a3cb6b529676b789aac7cd442aa850b94e2dcc548be5a4fc3b0b6"),
+        ("x86_64", "bc5a816d49ba0b0a1e9479bef20ee1ebdcb67d21ec78e1cf1b48fd3e4c4cfd60"),
+        ("aarch64", "78d884068d76843f191e692734b25fb4d70648b4fa14f91c0c82b2b6a2427485"),
     ]
 ]
 
@@ -953,11 +964,11 @@ _ZENOHD_BUILD_FILE = """exports_files(glob(["*"]))"""
         name = "zenoh_backend_filesystem_%s" % cpu,
         build_file_content = _ZENOHD_BUILD_FILE,
         sha256 = sha256,
-        urls = ["https://github.com/eclipse-zenoh/zenoh-backend-filesystem/releases/download/1.7.2/zenoh-backend-filesystem-1.7.2-%s-unknown-linux-gnu-standalone.zip" % cpu],
+        urls = ["https://github.com/eclipse-zenoh/zenoh-backend-filesystem/releases/download/1.8.0/zenoh-backend-filesystem-1.8.0-%s-unknown-linux-gnu-standalone.zip" % cpu],
     )
     for cpu, sha256 in [
-        ("x86_64", "2097ee178ac930cfbb29f26152260f5002029959ec457b957d3db506586a4bb2"),
-        ("aarch64", "ebeceb636ea5cc9d82b18cd6e3ef14786291577a4f5ded8d80d2cb2eb192126e"),
+        ("x86_64", "0b4d9f4e9df2a289d7b7efd22a021353eaec093b3e15879f31fce46bc9975d7b"),
+        ("aarch64", "8ae73c9324189c945737a94aa072beffd62b364f3b6547d4a8acb16517e5756d"),
     ]
 ]
 
@@ -1015,21 +1026,11 @@ single_version_override(
 )
 
 # ffmpeg@7.1.1.bcr.beta.7 depends on libxml2@2.15.1.bcr.1, which is incompatible with
-# insrc. We must force 2.14.4.bcr.1 until we have fixed this incompatibility.
+# insrc (because of Aravis, see reference to b/441702501 above).
+# We must force 2.14.4.bcr.1 until we have fixed this incompatibility.
 single_version_override(
     module_name = "libxml2",
     version = "2.14.4.bcr.1",
-)
-
-# The upstream maintainer of libvpx didn't want to add includes = ["."] to their BUILD file.
-# They arrived at a solution that worked for the BCR CI but does not appear to work for us.
-# See: https://github.com/bazelbuild/bazel-central-registry/pull/9883   Attempt #1
-#      https://github.com/bazelbuild/bazel-central-registry/pull/10000  Attempt #2
-#      https://github.com/bazelbuild/bazel-central-registry/pull/10005  Attempt #3 (problem)
-single_version_override(
-    module_name = "libvpx",
-    patch_strip = 0,
-    patches = ["//third_party/libvpx:includes.patch"],
 )
 
 
@@ -1049,11 +1050,6 @@ use_repo(
     "ros2_rosidl",
 )
 
-single_version_override(
-    module_name = "zenoh-c",
-    patch_strip = 1,
-    patches = ["//third_party/zenohc:static.patch"],
-)
 
 
 

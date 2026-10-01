@@ -39,6 +39,17 @@
 
 ; --------------------------------- FUNCTIONS ---------------------------------
 
+(deffunction operation-events-add-tree-state-change-event (?operation-name
+               ?tree-id ?proto-state)
+
+  (bind ?event-proto
+    (pb-create "intrinsic_proto.executive.OperationEvent"))
+  (pb-set-field ?event-proto "tree_state.tree_resolved_id" (str-cat ?tree-id))
+  (pb-set-field ?event-proto "tree_state.state" ?proto-state)
+  (operation-events-add-event ?operation-name ?event-proto)
+
+)
+
 (deffunction operation-events-add-node-state-change-event (?operation-name
                ?tree-id ?node-id ?proto-state ?was-recovered)
 
@@ -49,6 +60,19 @@
 
   (pb-set-field ?event-proto "node_state.state" ?proto-state)
   (pb-set-field ?event-proto "node_state.recovered" ?was-recovered)
+  (operation-events-add-event ?operation-name ?event-proto)
+
+)
+
+(deffunction operation-events-add-task-node-state-change-event (?operation-name
+               ?tree-id ?node-id ?proto-state)
+
+  (bind ?event-proto
+    (pb-create "intrinsic_proto.executive.OperationEvent"))
+  (set-node-identifier-proto ?event-proto "task_node_state.node_identifier"
+                             ?tree-id ?node-id)
+
+  (pb-set-field ?event-proto "task_node_state.state" ?proto-state)
   (operation-events-add-event ?operation-name ?event-proto)
 
 )

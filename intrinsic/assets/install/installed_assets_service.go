@@ -67,6 +67,7 @@ import (
 	iagrpcpb "intrinsic/assets/proto/installed_assets_go_proto"
 	iapb "intrinsic/assets/proto/installed_assets_go_proto"
 	mdpb "intrinsic/assets/proto/metadata_go_proto"
+	assetpb "intrinsic/assets/proto/v1/asset_go_proto"
 	searchpb "intrinsic/assets/proto/v1/search_go_proto"
 	viewpb "intrinsic/assets/proto/view_go_proto"
 	apb "intrinsic/config/proto/application_go_proto"
@@ -959,6 +960,7 @@ func (s *installedAssetsService) installAssets(
 	policy iapb.UpdatePolicy,
 	toInstall *orderedmap.OrderedMap[string, *rtrpb.ResourceTypeRuntime],
 	referencedToInstall map[string]*rtrpb.ResourceTypeRuntime,
+	mustExist map[string]struct{},
 	setMetadata setMetadataFn,
 ) error {
 	currentRTRs, err := resourcetyperuntime.GetAll(ctx, s.rtrClient)
@@ -978,6 +980,13 @@ func (s *installedAssetsService) installAssets(
 	state, err := s.summarizeState(ctx)
 	if err != nil {
 		return err
+	}
+	for id := range toInstall.Keys() {
+		if _, ok := mustExist[id]; ok {
+			if _, ok := state.versions[id]; !ok {
+				return status.Errorf(codes.NotFound, "requested update of %q which is not installed", id)
+			}
+		}
 	}
 	pruneReferencedAssets(state, toInstall, referencedToInstall)
 	actions := planActions(state, toInstall)
@@ -1148,11 +1157,13 @@ type createOpts struct {
 	// metadataFrom returns the metadata message of the LRO from its contents -- extended status
 	// in this case, for representing dependency validation errors.
 	metadataFrom     func(warnings *statuspb.ExtendedStatus) proto.Message
-	returnConversion func(*iapb.CreateInstalledAssetsResponse) proto.Message
+	returnConversion func(*iapb.BatchCreateInstalledAssetsResponse) proto.Message
 }
 
-// createInstalledAssets is an internal handler for asset creation functions.  This supports singular and batch methods.  Normally the singular method could call the batch method internally and the convert before returning, but structure is slightly different as the conversion function must be delayed until the long running operation is complete.
-func (s *installedAssetsService) createInstalledAssets(ctx context.Context, req *iapb.CreateInstalledAssetsRequest, opts createOpts) (*lropb.Operation, error) {
+// batchCreateInstalledAssets is an internal handler for asset creation functions. This supports singular, plural, and batch methods.
+func (s *installedAssetsService) batchCreateInstalledAssets(ctx context.Context, req *iapb.BatchCreateInstalledAssetsRequest, opts createOpts) (*lropb.Operation, error) {
+	policy := req.GetPolicy()
+
 	// Keep track of the order of Assets as provided in the request in a slice.
 	var toInstallIDs []string
 
@@ -1160,9 +1171,17 @@ func (s *installedAssetsService) createInstalledAssets(ctx context.Context, req 
 	pullFromCatalog := make(map[string]*idpb.IdVersion)
 	// Map from Solution IDs to map from IDVersion strings to IDVersion protos.
 	pullFromSolutions := make(map[string]map[string]*idpb.IdVersion)
-	for _, a := range req.GetAssets() {
+	for _, r := range req.GetRequests() {
+		if r.GetPolicy() != iapb.UpdatePolicy_UPDATE_POLICY_UNSPECIFIED {
+			if policy != iapb.UpdatePolicy_UPDATE_POLICY_UNSPECIFIED && policy != r.GetPolicy() {
+				return nil, status.Errorf(codes.InvalidArgument, "conflicting update policies specified: %v and %v", policy, r.GetPolicy())
+			}
+			policy = r.GetPolicy()
+		}
+
+		a := r.GetAsset()
 		switch v := a.GetVariant().(type) {
-		case *iapb.CreateInstalledAssetsRequest_Asset_Catalog:
+		case *iapb.CreateInstalledAssetRequest_Asset_Catalog:
 			idv, err := idutils.IDVersionFromProto(v.Catalog)
 			if err != nil {
 				return nil, status.Errorf(codes.InvalidArgument, "invalid Asset id_version for catalog request: %v", err)
@@ -1172,7 +1191,7 @@ func (s *installedAssetsService) createInstalledAssets(ctx context.Context, req 
 			}
 			pullFromCatalog[idv] = v.Catalog
 			toInstallIDs = append(toInstallIDs, idutils.IDFromProtoUnchecked(v.Catalog.GetId()))
-		case *iapb.CreateInstalledAssetsRequest_Asset_SolutionAsset:
+		case *iapb.CreateInstalledAssetRequest_Asset_SolutionAsset:
 			id, err := idutils.IDProtoFromString(v.SolutionAsset.GetName())
 			if err != nil {
 				return nil, status.Errorf(codes.InvalidArgument, "invalid Asset name %q in Solution %q (it should be an Asset ID): %v", v.SolutionAsset.GetName(), v.SolutionAsset.GetBranchId(), err)
@@ -1202,22 +1221,54 @@ func (s *installedAssetsService) createInstalledAssets(ctx context.Context, req 
 		}
 	}
 
+	return s.gatherAndScheduleInstall(ctx, installScheduleOpts{
+		opPrefix:          "install",
+		policy:            policy,
+		toInstallIDs:      toInstallIDs,
+		mustExist:         nil, // Should only be set for update operations.
+		local:             local,
+		pullFromCatalog:   pullFromCatalog,
+		pullFromSolutions: pullFromSolutions,
+		metadataFrom:      opts.metadataFrom,
+		returnConversion: func(installedAssets []*iapb.InstalledAsset) proto.Message {
+			return opts.returnConversion(&iapb.BatchCreateInstalledAssetsResponse{
+				InstalledAssets: installedAssets,
+			})
+		},
+	})
+}
+
+type installScheduleOpts struct {
+	opPrefix          string
+	policy            iapb.UpdatePolicy
+	toInstallIDs      []string
+	mustExist         map[string]struct{}
+	local             []*rtrpb.ResourceTypeRuntime
+	pullFromCatalog   map[string]*idpb.IdVersion
+	pullFromSolutions map[string]map[string]*idpb.IdVersion
+	// metadataFrom returns the metadata message of the LRO from its contents -- extended status
+	// in this case, for representing dependency validation errors.
+	metadataFrom     func(warnings *statuspb.ExtendedStatus) proto.Message
+	returnConversion func([]*iapb.InstalledAsset) proto.Message
+}
+
+func (s *installedAssetsService) gatherAndScheduleInstall(ctx context.Context, opts installScheduleOpts) (*lropb.Operation, error) {
 	// Gather local Assets.
 	toInstall := make(map[string]*rtrpb.ResourceTypeRuntime)
-	if err := appendAssetsToInstall(toInstall, local); err != nil {
+	if err := appendAssetsToInstall(toInstall, opts.local); err != nil {
 		return nil, err
 	}
 
 	// Gather catalog Assets.
 	catalogGatherer := gather.FromAssetCatalog(s.aciClient)
-	if catalogRTRs, _, err := catalogGatherer(ctx, slices.Collect(maps.Values(pullFromCatalog))); err != nil {
+	if catalogRTRs, _, err := catalogGatherer(ctx, slices.Collect(maps.Values(opts.pullFromCatalog))); err != nil {
 		return nil, err
 	} else if err := appendAssetsToInstall(toInstall, catalogRTRs); err != nil {
 		return nil, err
 	}
 
 	// Gather Assets from Solutions.
-	for branchID, pullFromSolution := range pullFromSolutions {
+	for branchID, pullFromSolution := range opts.pullFromSolutions {
 		solutionGatherer := gather.FromSolution(
 			gather.WithSolutionACIClient(s.aciClient),
 			gather.WithSolutionBranchID(branchID),
@@ -1234,7 +1285,7 @@ func (s *installedAssetsService) createInstalledAssets(ctx context.Context, req 
 	// in the request. When dealing with referenced Assets, if multiple references to the same Asset
 	// ID are found with different versions or definitions, the first encountered referenced version
 	// for that Asset ID takes precedence.
-	orderedToInstall, err := orderedmap.FromMap(toInstall, toInstallIDs)
+	orderedToInstall, err := orderedmap.FromMap(toInstall, opts.toInstallIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -1305,7 +1356,7 @@ func (s *installedAssetsService) createInstalledAssets(ctx context.Context, req 
 
 	// At this point the logic becomes dependent on the state of the cluster, so handle this within
 	// the queue.  There's a single worker, so requests will be handled sequentially.
-	op := operations.NewWithPrefix("install")
+	op := operations.NewWithPrefix(opts.opPrefix)
 	err = s.runner.Schedule(ctx, op, func(ctx context.Context) (proto.Message, error) {
 		var setMetadata setMetadataFn = func(es *statuspb.ExtendedStatus) {
 			if opts.metadataFrom != nil {
@@ -1315,18 +1366,18 @@ func (s *installedAssetsService) createInstalledAssets(ctx context.Context, req 
 				}
 			}
 		}
-		if err := s.installAssets(ctx, req.GetPolicy(), orderedToInstall, referencedAssets, setMetadata); err != nil {
+		if err := s.installAssets(ctx, opts.policy, orderedToInstall, referencedAssets, opts.mustExist, setMetadata); err != nil {
 			return nil, err
 		}
 
-		resp := &iapb.CreateInstalledAssetsResponse{}
+		var installedAssets []*iapb.InstalledAsset
 		for rtr := range orderedToInstall.Values() {
-			resp.InstalledAssets = append(resp.InstalledAssets, &iapb.InstalledAsset{
+			installedAssets = append(installedAssets, &iapb.InstalledAsset{
 				Name:     idutils.IDFromProtoUnchecked(rtr.GetMetadata().GetIdVersion().GetId()),
 				Metadata: rtr.GetMetadata(),
 			})
 		}
-		return opts.returnConversion(resp), nil
+		return opts.returnConversion(installedAssets), nil
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to enqueue operation: %v", err)
@@ -1338,15 +1389,30 @@ func (s *installedAssetsService) CreateInstalledAssets(ctx context.Context, req 
 	ctx, span := trace.StartSpan(ctx, "installed_assets_service.CreateInstalledAssets")
 	defer span.End()
 
-	return s.createInstalledAssets(ctx, req, createOpts{
+	requests := make([]*iapb.CreateInstalledAssetRequest, 0, len(req.GetAssets()))
+	for _, a := range req.GetAssets() {
+		singularAsset, err := convertPluralAssetToSingular(a)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, &iapb.CreateInstalledAssetRequest{
+			Asset: singularAsset,
+		})
+	}
+
+	return s.batchCreateInstalledAssets(ctx, &iapb.BatchCreateInstalledAssetsRequest{
+		Requests: requests,
+		Policy:   req.GetPolicy(),
+	}, createOpts{
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.CreateInstalledAssetsMetadata{
 				Warnings: es,
 			}
 		},
-		returnConversion: func(resp *iapb.CreateInstalledAssetsResponse) proto.Message {
-			// Identity function since this is already what we need.
-			return resp
+		returnConversion: func(resp *iapb.BatchCreateInstalledAssetsResponse) proto.Message {
+			return &iapb.CreateInstalledAssetsResponse{
+				InstalledAssets: resp.GetInstalledAssets(),
+			}
 		},
 	})
 }
@@ -1355,79 +1421,210 @@ func (s *installedAssetsService) CreateInstalledAsset(ctx context.Context, req *
 	ctx, span := trace.StartSpan(ctx, "installed_assets_service.CreateInstalledAsset")
 	defer span.End()
 
-	// This conversion is a bit messy because the variant types are different.
-	// TODO - b/364732263: change the plural create to a batch create that
-	// takes in many singular requests.
-	var asset *iapb.CreateInstalledAssetsRequest_Asset
-	switch v := req.GetAsset().GetVariant().(type) {
-	case *iapb.CreateInstalledAssetRequest_Asset_Catalog:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_Catalog{
-				Catalog: v.Catalog,
-			},
-		}
-	case *iapb.CreateInstalledAssetRequest_Asset_SolutionAsset:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_SolutionAsset{
-				SolutionAsset: v.SolutionAsset,
-			},
-		}
-	case *iapb.CreateInstalledAssetRequest_Asset_Data:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_Data{
-				Data: v.Data,
-			},
-		}
-	case *iapb.CreateInstalledAssetRequest_Asset_Service:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_Service{
-				Service: v.Service,
-			},
-		}
-	case *iapb.CreateInstalledAssetRequest_Asset_SceneObject:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_SceneObject{
-				SceneObject: v.SceneObject,
-			},
-		}
-	case *iapb.CreateInstalledAssetRequest_Asset_Skill:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_Skill{
-				Skill: v.Skill,
-			},
-		}
-	case *iapb.CreateInstalledAssetRequest_Asset_HardwareDevice:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_HardwareDevice{
-				HardwareDevice: v.HardwareDevice,
-			},
-		}
-	case *iapb.CreateInstalledAssetRequest_Asset_Process:
-		asset = &iapb.CreateInstalledAssetsRequest_Asset{
-			Variant: &iapb.CreateInstalledAssetsRequest_Asset_Process{
-				Process: v.Process,
-			},
-		}
-	// Return errors here for unspecified and unsupported so we don't collapse
-	// those into the same error in the conversion process.
-	case nil:
-		return nil, status.Errorf(codes.InvalidArgument, "unspecified variant type")
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unsupported variant type: %T", v)
-	}
-
-	return s.createInstalledAssets(ctx, &iapb.CreateInstalledAssetsRequest{
-		Assets: []*iapb.CreateInstalledAssetsRequest_Asset{asset},
-		Policy: req.Policy,
+	return s.batchCreateInstalledAssets(ctx, &iapb.BatchCreateInstalledAssetsRequest{
+		Requests: []*iapb.CreateInstalledAssetRequest{req},
+		Policy:   req.GetPolicy(),
 	}, createOpts{
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.CreateInstalledAssetMetadata{
 				Warnings: es,
 			}
 		},
-		returnConversion: func(resp *iapb.CreateInstalledAssetsResponse) proto.Message {
-			// This function can assume success of the method, so just return
-			// the first asset.
+		returnConversion: func(resp *iapb.BatchCreateInstalledAssetsResponse) proto.Message {
+			return resp.GetInstalledAssets()[0]
+		},
+	})
+}
+
+func (s *installedAssetsService) BatchCreateInstalledAssets(ctx context.Context, req *iapb.BatchCreateInstalledAssetsRequest) (*lropb.Operation, error) {
+	ctx, span := trace.StartSpan(ctx, "installed_assets_service.BatchCreateInstalledAssets")
+	defer span.End()
+
+	return s.batchCreateInstalledAssets(ctx, req, createOpts{
+		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
+			return &iapb.BatchCreateInstalledAssetsMetadata{
+				Warnings: es,
+			}
+		},
+		returnConversion: func(resp *iapb.BatchCreateInstalledAssetsResponse) proto.Message {
+			return resp
+		},
+	})
+}
+
+func convertPluralAssetToSingular(a *iapb.CreateInstalledAssetsRequest_Asset) (*iapb.CreateInstalledAssetRequest_Asset, error) {
+	switch v := a.GetVariant().(type) {
+	case *iapb.CreateInstalledAssetsRequest_Asset_Catalog:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_Catalog{
+				Catalog: v.Catalog,
+			},
+		}, nil
+	case *iapb.CreateInstalledAssetsRequest_Asset_SolutionAsset:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_SolutionAsset{
+				SolutionAsset: v.SolutionAsset,
+			},
+		}, nil
+	case *iapb.CreateInstalledAssetsRequest_Asset_Data:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_Data{
+				Data: v.Data,
+			},
+		}, nil
+	case *iapb.CreateInstalledAssetsRequest_Asset_Service:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_Service{
+				Service: v.Service,
+			},
+		}, nil
+	case *iapb.CreateInstalledAssetsRequest_Asset_SceneObject:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_SceneObject{
+				SceneObject: v.SceneObject,
+			},
+		}, nil
+	case *iapb.CreateInstalledAssetsRequest_Asset_Skill:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_Skill{
+				Skill: v.Skill,
+			},
+		}, nil
+	case *iapb.CreateInstalledAssetsRequest_Asset_HardwareDevice:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_HardwareDevice{
+				HardwareDevice: v.HardwareDevice,
+			},
+		}, nil
+	case *iapb.CreateInstalledAssetsRequest_Asset_Process:
+		return &iapb.CreateInstalledAssetRequest_Asset{
+			Variant: &iapb.CreateInstalledAssetRequest_Asset_Process{
+				Process: v.Process,
+			},
+		}, nil
+	case nil:
+		return nil, status.Errorf(codes.InvalidArgument, "unspecified variant type")
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "unsupported variant type: %T", v)
+	}
+}
+
+type updateOpts struct {
+	metadataFrom     func(warnings *statuspb.ExtendedStatus) proto.Message
+	returnConversion func(*iapb.BatchUpdateInstalledAssetsResponse) proto.Message
+}
+
+func (s *installedAssetsService) batchUpdateInstalledAssets(ctx context.Context, req *iapb.BatchUpdateInstalledAssetsRequest, opts updateOpts) (*lropb.Operation, error) {
+	policy := req.GetPolicy()
+	if policy == iapb.UpdatePolicy_UPDATE_POLICY_ADD_NEW_ONLY {
+		return nil, status.Error(codes.InvalidArgument, "add new only policy is not supported for update")
+	}
+
+	var toInstallIDs []string
+	mustExist := make(map[string]struct{})
+	var local []*rtrpb.ResourceTypeRuntime
+	pullFromCatalog := make(map[string]*idpb.IdVersion)
+
+	for _, r := range req.GetRequests() {
+		if r.GetPolicy() == iapb.UpdatePolicy_UPDATE_POLICY_ADD_NEW_ONLY {
+			return nil, status.Error(codes.InvalidArgument, "add new only policy is not supported for update")
+		}
+		if r.GetPolicy() != iapb.UpdatePolicy_UPDATE_POLICY_UNSPECIFIED {
+			if policy != iapb.UpdatePolicy_UPDATE_POLICY_UNSPECIFIED && policy != r.GetPolicy() {
+				return nil, status.Errorf(codes.InvalidArgument, "conflicting update policies specified: %v and %v", policy, r.GetPolicy())
+			}
+			policy = r.GetPolicy()
+		}
+
+		ia := r.GetInstalledAsset()
+		if ia == nil {
+			return nil, status.Error(codes.InvalidArgument, "installed_asset must be specified")
+		}
+
+		var id string
+		switch v := ia.GetAsset().GetSource().(type) {
+		case *assetpb.Asset_Catalog:
+			idv, err := idutils.IDVersionFromProto(v.Catalog.GetIdVersion())
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "invalid Asset id_version for catalog request: %v", err)
+			}
+			if _, exists := pullFromCatalog[idv]; exists {
+				return nil, status.Errorf(codes.InvalidArgument, "duplicate catalog requests for %q", idv)
+			}
+			pullFromCatalog[idv] = v.Catalog.GetIdVersion()
+			id = idutils.IDFromProtoUnchecked(v.Catalog.GetIdVersion().GetId())
+		case *assetpb.Asset_Local:
+			rtr, err := localconv.ProcessedAssetToRuntime(ctx, v.Local,
+				runtime.WithACIClient(s.aciClient),
+				runtime.WithSkipValidation(), // We'll validate all RTRs below.
+			)
+			if err != nil {
+				return nil, err
+			}
+			local = append(local, rtr)
+			id = idutils.IDFromProtoUnchecked(rtr.GetMetadata().GetIdVersion().GetId())
+		case nil:
+			return nil, status.Error(codes.InvalidArgument, "unspecified asset source")
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "unsupported asset source: %T", v)
+		}
+
+		if ia.GetName() != "" && ia.GetName() != id {
+			return nil, status.Errorf(codes.InvalidArgument, "installed_asset.name %q does not match asset ID %q", ia.GetName(), id)
+		}
+		toInstallIDs = append(toInstallIDs, id)
+		if !(req.GetAllowMissing() || r.GetAllowMissing()) {
+			mustExist[id] = struct{}{}
+		}
+	}
+
+	return s.gatherAndScheduleInstall(ctx, installScheduleOpts{
+		opPrefix:        "update",
+		policy:          policy,
+		toInstallIDs:    toInstallIDs,
+		mustExist:       mustExist,
+		local:           local,
+		pullFromCatalog: pullFromCatalog,
+		metadataFrom:    opts.metadataFrom,
+		returnConversion: func(installedAssets []*iapb.InstalledAsset) proto.Message {
+			return opts.returnConversion(&iapb.BatchUpdateInstalledAssetsResponse{
+				InstalledAssets: installedAssets,
+			})
+		},
+	})
+}
+
+func (s *installedAssetsService) BatchUpdateInstalledAssets(ctx context.Context, req *iapb.BatchUpdateInstalledAssetsRequest) (*lropb.Operation, error) {
+	ctx, span := trace.StartSpan(ctx, "installed_assets_service.BatchUpdateInstalledAssets")
+	defer span.End()
+
+	return s.batchUpdateInstalledAssets(ctx, req, updateOpts{
+		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
+			return &iapb.BatchUpdateInstalledAssetsMetadata{
+				Warnings: es,
+			}
+		},
+		returnConversion: func(resp *iapb.BatchUpdateInstalledAssetsResponse) proto.Message {
+			return resp
+		},
+	})
+}
+
+func (s *installedAssetsService) UpdateInstalledAsset(ctx context.Context, req *iapb.UpdateInstalledAssetRequest) (*lropb.Operation, error) {
+	ctx, span := trace.StartSpan(ctx, "installed_assets_service.UpdateInstalledAsset")
+	defer span.End()
+
+	return s.batchUpdateInstalledAssets(ctx, &iapb.BatchUpdateInstalledAssetsRequest{
+		Requests:     []*iapb.UpdateInstalledAssetRequest{req},
+		Policy:       req.GetPolicy(),
+		AllowMissing: req.GetAllowMissing(),
+	}, updateOpts{
+		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
+			return &iapb.UpdateInstalledAssetMetadata{
+				Warnings: es,
+			}
+		},
+		returnConversion: func(resp *iapb.BatchUpdateInstalledAssetsResponse) proto.Message {
 			return resp.GetInstalledAssets()[0]
 		},
 	})

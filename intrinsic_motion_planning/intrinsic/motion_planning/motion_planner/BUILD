@@ -299,7 +299,9 @@ cc_library(
     name = "motion_planner_base_test_fixture",
     testonly = True,
     srcs = ["motion_planner_base_test_fixture.cc"],
-    hdrs = ["motion_planner_base_test_fixture.h"],
+    hdrs = [
+        "motion_planner_base_test_fixture.h",
+    ] + [],
     deps = [
         "//intrinsic/skills/apps/testing:test_world",
         "//intrinsic/util:eigen",
@@ -389,6 +391,7 @@ cc_library(
         ":trajectory_parameterizer",
         ":trajectory_segment",
         "//intrinsic/geometry/api:distance_stats",
+        "//intrinsic/stats:scoped_span",
         "//intrinsic/util/status:status_builder",
         "//intrinsic/util/status:status_macros",
         "//intrinsic/world",
