@@ -1,4 +1,11 @@
 # Intrinsic Core
+
+> **arm64:** this fork builds and runs Intrinsic Core natively on arm64 hosts:
+> branch `arm64-main` on upstream `main`, and `arm64-20260922.0` on release
+> 20260922.0 (the version OMTS uses). See
+> [Run on arm64](developer_resources/guides/run_on_arm64.md) and, for OMTS,
+> [jkammerl/native-images](https://github.com/jkammerl/native-images).
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/Intrinsic%20developer%20community-Join%20us-blue.svg)](https://developer.intrinsic.ai)
 [![ROS2 Compatibility](https://img.shields.io/badge/ROS2_Compatible-brightgreen.svg)](https://www.ros.org/)
