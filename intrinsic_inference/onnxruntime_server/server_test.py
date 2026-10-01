@@ -99,7 +99,9 @@ class ServerTest(absltest.TestCase):
     )
     self.server.start()
     self.addCleanup(self.server.stop, None)
-    self.channel = grpc.insecure_channel(f"unix://{socket}")
+    # Like Triton, the server appends --grpc-port to the socket path; the
+    # inference service connects to unix:///dev/shm/triton.sock:0.
+    self.channel = grpc.insecure_channel(f"unix://{socket}:0")
     self.addCleanup(self.channel.close)
     self.stub = service_pb2_grpc.GRPCInferenceServiceStub(self.channel)
 
@@ -352,7 +354,7 @@ class ServerStartupTest(absltest.TestCase):
   def test_grpc_endpoint(self):
     self.assertEqual(
         server_main.grpc_endpoint("unix:///dev/shm/triton.sock", 0),
-        "unix:///dev/shm/triton.sock",
+        "unix:///dev/shm/triton.sock:0",
     )
     self.assertEqual(
         server_main.grpc_endpoint("0.0.0.0", 8001), "0.0.0.0:8001"
@@ -395,13 +397,14 @@ class RealSegmentationModelTest(absltest.TestCase):
         server_main.parse_args([
             f"--model-repository={os.path.dirname(model_dir)}",
             f"--grpc-address=unix://{socket}",
+            "--grpc-port=0",
             "--model-control-mode=none",
             "--device=auto",
         ])
     )
     server.start()
     self.addCleanup(server.stop, None)
-    channel = grpc.insecure_channel(f"unix://{socket}")
+    channel = grpc.insecure_channel(f"unix://{socket}:0")
     self.addCleanup(channel.close)
     stub = service_pb2_grpc.GRPCInferenceServiceStub(channel)
     self.assertTrue(

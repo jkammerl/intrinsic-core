@@ -91,9 +91,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def grpc_endpoint(address: str, port: int) -> str:
-  """Returns the gRPC endpoint for Triton's --grpc-address/--grpc-port."""
-  if address.startswith("unix:"):
-    return address
+  """Returns the gRPC endpoint for Triton's --grpc-address/--grpc-port.
+
+  Like Triton, appends the port even to unix socket addresses: with
+  --grpc-address=unix:///dev/shm/triton.sock --grpc-port=0 the socket file is
+  /dev/shm/triton.sock:0, which is where the inference service connects.
+  """
   return f"{address}:{port}"
 
 
