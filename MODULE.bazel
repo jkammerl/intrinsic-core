@@ -490,6 +490,9 @@ bazel_dep(name = "fmt", version = "12.2.0")  # TODO(b/441702501) Remove when com
 bazel_dep(name = "freeimage", version = "3.19.10.bcr.6")  
 bazel_dep(name = "fuzztest", version = "20250805.0", repo_name = "com_google_fuzztest")
 bazel_dep(name = "glib", version = "2.82.2.bcr.9")  
+# glib 2.82.2.bcr.9 pulls in libffi 3.4.7.bcr.3, which does not build for
+# aarch64 ("No trampoline table implementation"); bcr.5 does.
+bazel_dep(name = "libffi", version = "3.4.7.bcr.5")
 
 
 bazel_dep(name = "gloop", version = "20260828.0")
