@@ -354,6 +354,17 @@ class ModelControllerBase(abc.ABC):
             message=message,
         )
 
+  def _async_replace_task(
+      self,
+      old_model_name: str,
+      old_model_proto: ml_model_pb2.MlModel,
+      model_name: str,
+      model_proto: ml_model_pb2.MlModel,
+  ) -> None:
+    """Unloads a model, then loads the model that replaces it."""
+    self._async_unload_task(old_model_name, old_model_proto)
+    self._async_load_task(model_name, model_proto)
+
   def _async_reload_task(
       self, model_name: str, model_proto: ml_model_pb2.MlModel
   ) -> None:
@@ -424,6 +435,31 @@ class ModelControllerBase(abc.ABC):
           self._model_states[m] = ModelAndState(
               state=ModelState.RELOADING, proto=new_models[m]
           )
+
+    # Unloading a model deletes its directory, which a new version of the same
+    # model is written to. Unload and load such pairs in one task, in order,
+    # so that they do not race on the directory.
+    unload_by_dir = {
+        current_models[m].model_config.name: m for m in unloads_to_submit
+    }
+    replacements = []
+    for model_name in list(loads_to_submit):
+      old_model_name = unload_by_dir.pop(
+          new_models[model_name].model_config.name, None
+      )
+      if old_model_name is not None:
+        unloads_to_submit.remove(old_model_name)
+        loads_to_submit.remove(model_name)
+        replacements.append((old_model_name, model_name))
+
+    for old_model_name, model_name in replacements:
+      self._submit_task(
+          self._async_replace_task,
+          old_model_name,
+          current_models[old_model_name],
+          model_name,
+          new_models[model_name],
+      )
 
     for model_name in unloads_to_submit:
       self._submit_task(

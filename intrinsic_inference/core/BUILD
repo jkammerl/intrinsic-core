@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@ai_intrinsic_sdks_pip_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
 package(
     default_visibility = [
@@ -71,6 +71,17 @@ py_library(
         ":telemetry_base",
         "//intrinsic_inference/core/v1:ml_model_py_pb2",
         "@com_google_absl_py//absl/logging",
+    ],
+)
+
+py_test(
+    name = "model_controller_base_test",
+    srcs = ["model_controller_base_test.py"],
+    deps = [
+        ":model_assets_manager_base",
+        ":model_controller_base",
+        "//intrinsic_inference/core/v1:ml_model_py_pb2",
+        "@com_google_absl_py//absl/testing:absltest",
     ],
 )
 
