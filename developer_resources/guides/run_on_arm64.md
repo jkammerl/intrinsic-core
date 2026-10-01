@@ -7,6 +7,12 @@ to install Intrinsic Core on arm64, and how to port a Solution such as the
 [Open Machine Tending Solution (OMTS)](https://github.com/intrinsic-ai/intrinsic-omts)
 to arm64.
 
+![OMTS running natively on arm64 in Gazebo](../img/guides/omts_arm64_gazebo.gif)
+
+_A machine-tending cycle of OMTS running natively on an arm64 VM without a
+GPU, shown in the Gazebo GUI at 2x speed. Pose estimation runs on the CPU
+before the robot moves; that part is cut._
+
 > [!NOTE]
 > arm64 support is new. Release artifacts (`intrinsic-base`, `inctl`) are
 > only published for x86-64, so on arm64 you build them from source. x86-64
@@ -21,9 +27,9 @@ to arm64.
 | Container images built with `python_oci_image` and `container_image` | Built for the host architecture. Base images must be multi-arch (see [Port a Solution](#port-a-solution-to-arm64)). |
 | ML inference service | Runs models with the [ONNX Runtime server](../../intrinsic_inference/onnxruntime_server/README.md) on the CPU, or on NVIDIA GPUs of arm64 hosts with CUDA. Triton Inference Server is x86-64 only. |
 | RViz | Works with the arm64 ROS 2 packages (`ros-lyrical-desktop`). |
-| Gazebo simulation | Builds on arm64; not yet verified end to end. |
+| Gazebo simulation | Runs natively, including the Gazebo GUI (`gz sim -g` from the ROS 2 Lyrical packages). |
 | Real-time control (ICON on `PREEMPT_RT`) | Not verified on arm64. Use an x86-64 PC for real robots. |
-| OMTS | Not yet ported; see [Port a Solution](#port-a-solution-to-arm64). |
+| OMTS | Runs end to end in simulation (pick, place, unload, return); see [Port a Solution](#port-a-solution-to-arm64). |
 
 ### GPUs
 
