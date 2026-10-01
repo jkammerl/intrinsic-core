@@ -58,9 +58,11 @@ filegroup(
     # architecture. Needed for tests that require OpenGL/EGL
     if ctx.os.arch in ("aarch64", "arm64"):
         # Debian bullseye arm64 sysroot from Chromium's
-        # build/linux/sysroot_scripts/sysroots.json.
-        glvnd_stubs_url = "https://commondatastorage.googleapis.com/chrome-linux-sysroot/c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"
-        glvnd_stubs_sha256 = "c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8"
+        # build/linux/sysroot_scripts/sysroots.json (Chromium 116-120). Newer
+        # Chromium sysroots replace the libraries with link-only stubs, which
+        # crash the dynamic loader when they end up in a binary's runfiles.
+        glvnd_stubs_url = "https://commondatastorage.googleapis.com/chrome-linux-sysroot/toolchain/41a6c8dec4c4304d6509e30cbaf9218dffb4438e/debian_bullseye_arm64_sysroot.tar.xz"
+        glvnd_stubs_sha256 = "902d1a40a5fd8c3764a36c8d377af5945a92e3d264c6252855bda4d7ef81d3df"
     else:
         glvnd_stubs_url = "https://storage.googleapis.com/chrome-linux-sysroot/toolchain/4f611ec025be98214164d4bf9fbe8843f58533f7/debian_bullseye_amd64_sysroot.tar.xz"
         glvnd_stubs_sha256 = "5df5be9357b425cdd70d92d4697d07e7d55d7a923f037c22dc80a78e85842d2c"
