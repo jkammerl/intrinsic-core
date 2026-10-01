@@ -14,7 +14,7 @@
 
 load("//bazel:cc_macros.bzl", "cc_library", "pybind_extension")
 load("//bazel:go_macros.bzl", "go_library")
-load("//bazel:python.bzl", "py_library")
+load("//bazel:python.bzl", "py_library", "py_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -132,6 +132,17 @@ py_library(
     name = "descriptors_py",
     srcs = ["descriptors.py"],
     deps = ["@com_google_protobuf//:protobuf_python"],
+)
+
+py_test(
+    name = "descriptors_py_test",
+    srcs = ["descriptors_test.py"],
+    main = "descriptors_test.py",
+    deps = [
+        ":descriptors_py",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@com_google_protobuf//:protobuf_python",
+    ],
 )
 
 cc_library(

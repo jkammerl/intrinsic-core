@@ -29,7 +29,9 @@ def _add_file_and_imports(
   """Adds the current file to file_descriptors if not present.
 
   Recursively adds dependencies until all dependencies (along with transients)
-  are present in file_descriptors.
+  are present in file_descriptors. Dependencies are added before the files that
+  import them, so that consumers which build the files in order (e.g. Go's
+  protodesc.NewFile) can resolve every import.
 
   Args:
     file_descriptors: A dictionary mapping file descriptor name to file
@@ -39,9 +41,9 @@ def _add_file_and_imports(
   if current_file.name in file_descriptors:
     return
 
-  file_descriptors[current_file.name] = current_file
   for dependency_file_descriptor in current_file.dependencies:
     _add_file_and_imports(file_descriptors, dependency_file_descriptor)
+  file_descriptors[current_file.name] = current_file
 
 
 def gen_file_descriptor_set(
@@ -54,7 +56,7 @@ def gen_file_descriptor_set(
 
   Returns:
     A descriptor_pb2.FileDescriptorSet containing the file descriptors of all
-    transitive dependencies of msg_descriptor.
+    transitive dependencies of msg_descriptor, each after its dependencies.
   """
   msg_descriptors: Iterable[descriptor.Descriptor] = (
       msg_descriptor
@@ -65,8 +67,8 @@ def gen_file_descriptor_set(
   file_descriptors: dict[str, descriptor.FileDescriptor] = {}
   for msg_descriptor in msg_descriptors:
     _add_file_and_imports(file_descriptors, msg_descriptor.file)
-    for file_descriptor in file_descriptors.values():
-      file_descriptor.CopyToProto(file_descriptor_set.file.add())
+  for file_descriptor in file_descriptors.values():
+    file_descriptor.CopyToProto(file_descriptor_set.file.add())
   return file_descriptor_set
 
 
