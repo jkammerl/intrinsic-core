@@ -324,6 +324,13 @@ bazel_dep(name = "rules_java", version = "9.9.0")
 ########
 
 bazel_dep(name = "rules_cuda", version = "0.3.0")
+# rules_cuda downloads the x86-64 CUDA redistributables on any host; use the
+# host's (arm64: linux-sbsa).
+single_version_override(
+    module_name = "rules_cuda",
+    patch_strip = 1,
+    patches = ["//third_party/rules_cuda:host_arch.patch"],
+)
 
 cuda = use_extension("@rules_cuda//cuda:extensions.bzl", "toolchain")
 cuda.redist_json(
