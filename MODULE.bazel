@@ -1050,6 +1050,14 @@ single_version_override(
     patches = ["//third_party/libvpx:includes.patch"],
 )
 
+# ogre-next's NEON OgreBooleanMask.h misses an include, which breaks the Gazebo
+# build on arm64 hosts.
+single_version_override(
+    module_name = "ogre-next",
+    patch_strip = 1,
+    patches = ["//third_party/ogre_next:neon_boolean_mask.patch"],
+)
+
 
 
 # Needed to build rules_ros2 messages and tf2
